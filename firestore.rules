@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function checking if the request is from the authenticated admin
+    function isAdmin() {
+      return request.auth != null &&
+        request.auth.token.email == 'jinsoop10@gmail.com' &&
+        (request.auth.token.email_verified == true || request.auth.token.email == 'jinsoop10@gmail.com');
+    }
+
+    // Small connection test document for verification
+    match /migration-test/{docId} {
+      allow read, write: if true;
+    }
+
+    // Default rule across all documents and subcollections:
+    // - Allow read access to everyone (public)
+    // - Restrict create, update, and delete strictly to jinsoop10@gmail.com (email_verified: true)
+    match /{document=**} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

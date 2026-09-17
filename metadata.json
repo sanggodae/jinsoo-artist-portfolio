@@ -1,0 +1,6 @@
+{
+  "name": "Artwork Management App",
+  "description": "PARK JIN SOO (박진수 · 朴鎭洙) 작가 포트폴리오 및 한국 현대미술 회화 작품 아카이빙 시스템",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
