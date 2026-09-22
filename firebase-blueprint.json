@@ -122,6 +122,25 @@
         "timestamp": { "type": "string", "description": "Test timestamp" }
       },
       "required": ["test", "timestamp"]
+    },
+    "boardPost": {
+      "title": "Board Post",
+      "description": "Artist studio log, exhibition journal, and visitor submissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique post ID" },
+        "title": { "type": "string", "description": "Post title" },
+        "content": { "type": "string", "description": "Post content" },
+        "coverImage": { "type": "string", "description": "Optional primary cover image URL" },
+        "imageUrls": { "type": "array", "description": "Attached image URLs" },
+        "videoUrls": { "type": "array", "description": "Attached video URLs" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Update timestamp" },
+        "status": { "type": "string", "description": "Status: pending, published, rejected" },
+        "authorName": { "type": "string", "description": "Author name" },
+        "isAdminPost": { "type": "boolean", "description": "Whether written by admin" }
+      },
+      "required": ["id", "title", "content", "imageUrls", "videoUrls", "createdAt", "updatedAt", "status", "authorName", "isAdminPost"]
     }
   },
   "firestore": {
@@ -156,6 +175,10 @@
     "/submissions/{submissionId}": {
       "schema": "submission",
       "description": "Private submission packages (Admin only)"
+    },
+    "/boardPosts/{postId}": {
+      "schema": "boardPost",
+      "description": "Artist journal and board posts"
     }
   }
 }

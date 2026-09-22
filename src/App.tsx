@@ -15,6 +15,7 @@ import { WorksListView } from './components/portfolio/WorksListView';
 import { WorksGalleryView } from './components/portfolio/WorksGalleryView';
 import { ContactView } from './components/portfolio/ContactView';
 import { SubmissionView } from './components/portfolio/SubmissionView';
+import { BoardView } from './components/portfolio/BoardView';
 
 import {
   Artwork,
@@ -70,7 +71,20 @@ export default function App() {
 
   // Portfolio Content States (CV, Artist Notes, Contact & Site Settings)
   const [cvSections, setCvSections] = useState<CVSection[]>(DEFAULT_CV_SECTIONS);
-  const [artistNotes, setArtistNotes] = useState<ArtistNoteItem[]>(DEFAULT_ARTIST_NOTES);
+  const [artistNotes, setArtistNotes] = useState<ArtistNoteItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('PARK_JINSOO_ARTIST_NOTES_V1');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_ARTIST_NOTES;
+  });
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     try {
       const cached = localStorage.getItem('PARK_JINSOO_SITE_SETTINGS_V1');
@@ -144,7 +158,21 @@ export default function App() {
           setCvSections(cvList);
         }
         if (notesList && notesList.length > 0) {
-          setArtistNotes(notesList);
+          const mergedNotes = notesList.map((n) => {
+            const defNote = DEFAULT_ARTIST_NOTES.find((d) => d.key === n.key);
+            return {
+              ...defNote,
+              ...n,
+              contentEn: n.contentEn || defNote?.contentEn || '',
+              isCustomEnglish: n.isCustomEnglish ?? false,
+            };
+          });
+          setArtistNotes(mergedNotes);
+          try {
+            localStorage.setItem('PARK_JINSOO_ARTIST_NOTES_V1', JSON.stringify(mergedNotes));
+          } catch {
+            // ignore
+          }
         }
         if (settingsData) {
           setSiteSettings((prev) => {
@@ -560,7 +588,14 @@ export default function App() {
               notes={artistNotes}
               settings={siteSettings}
               isAdmin={isAdmin}
-              onUpdateNotes={setArtistNotes}
+              onUpdateNotes={(newNotes) => {
+                setArtistNotes(newNotes);
+                try {
+                  localStorage.setItem('PARK_JINSOO_ARTIST_NOTES_V1', JSON.stringify(newNotes));
+                } catch {
+                  // ignore
+                }
+              }}
               onUpdateSettings={setSiteSettings}
               onOpenAuthModal={() => setIsAuthModalOpen(true)}
             />
@@ -607,7 +642,16 @@ export default function App() {
             </div>
           )}
 
-          {/* 3-6. CONTACT View */}
+          {/* 3-6. BOARD View */}
+          {portfolioTab === 'BOARD' && (
+            <BoardView
+              isAdmin={isAdmin}
+              settings={siteSettings}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )}
+
+          {/* 3-7. CONTACT View */}
           {portfolioTab === 'CONTACT' && (
             <ContactView
               settings={siteSettings}

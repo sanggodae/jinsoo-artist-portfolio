@@ -274,3 +274,78 @@ export async function deleteStorageFile(storagePathOrUrl: string): Promise<void>
     console.warn('Storage file deletion skipped or failed:', err);
   }
 }
+
+/**
+ * Uploads a Board post photo to Firebase Storage at 'board/{postId}/images/...'
+ * completely separate from existing artworks and artist profile images.
+ */
+export async function uploadBoardImage(
+  postId: string,
+  fileOrBlob: Blob | File,
+  customFileName?: string
+): Promise<string> {
+  const timestamp = Date.now();
+  let ext = 'jpg';
+  if (fileOrBlob instanceof File && fileOrBlob.name) {
+    const parts = fileOrBlob.name.split('.');
+    if (parts.length > 1) {
+      ext = parts.pop()?.toLowerCase() || 'jpg';
+    }
+  }
+  const cleanExt = ext.replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+  const fileName = customFileName || `img_${timestamp}_${Math.random().toString(36).substring(2, 7)}.${cleanExt}`;
+  const destinationPath = `board/${postId}/images/${fileName}`;
+
+  try {
+    const storage = getFirebaseStorage();
+    const storageRef = ref(storage, destinationPath);
+    const contentType = fileOrBlob.type || (cleanExt === 'png' ? 'image/png' : 'image/jpeg');
+
+    await uploadBytes(storageRef, fileOrBlob, { contentType });
+    return await getDownloadURL(storageRef);
+  } catch (storageErr: any) {
+    console.warn(`[Firebase Storage] Board image upload to ${destinationPath} failed, attempting local fallback:`, storageErr);
+    // Graceful fallback: convert to base64 Data URL if storage fails in preview sandbox
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(fileOrBlob);
+    });
+  }
+}
+
+/**
+ * Uploads a Board post video to Firebase Storage at 'board/{postId}/videos/...'
+ * completely separate from existing artworks and assets.
+ */
+export async function uploadBoardVideo(
+  postId: string,
+  fileOrBlob: Blob | File,
+  customFileName?: string
+): Promise<string> {
+  const timestamp = Date.now();
+  let ext = 'mp4';
+  if (fileOrBlob instanceof File && fileOrBlob.name) {
+    const parts = fileOrBlob.name.split('.');
+    if (parts.length > 1) {
+      ext = parts.pop()?.toLowerCase() || 'mp4';
+    }
+  }
+  const cleanExt = ext.replace(/[^a-zA-Z0-9]/g, '') || 'mp4';
+  const fileName = customFileName || `video_${timestamp}_${Math.random().toString(36).substring(2, 7)}.${cleanExt}`;
+  const destinationPath = `board/${postId}/videos/${fileName}`;
+
+  try {
+    const storage = getFirebaseStorage();
+    const storageRef = ref(storage, destinationPath);
+    const contentType = fileOrBlob.type || 'video/mp4';
+
+    await uploadBytes(storageRef, fileOrBlob, { contentType });
+    return await getDownloadURL(storageRef);
+  } catch (storageErr: any) {
+    console.warn(`[Firebase Storage] Board video upload to ${destinationPath} failed, attempting local fallback:`, storageErr);
+    return URL.createObjectURL(fileOrBlob);
+  }
+}
+

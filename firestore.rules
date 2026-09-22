@@ -14,6 +14,19 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Board Posts:
+    // - Anyone can read published posts; admin can read all (pending/rejected/published)
+    // - Visitors can create ONLY with status == 'pending' and isAdminPost == false
+    // - Only admin can update or delete
+    match /boardPosts/{postId} {
+      allow read: if resource == null || resource.data.status == 'published' || isAdmin();
+      allow create: if isAdmin() || (
+        request.resource.data.status == 'pending' &&
+        request.resource.data.isAdminPost == false
+      );
+      allow update, delete: if isAdmin();
+    }
+
     // Default rule across all documents and subcollections:
     // - Allow read access to everyone (public)
     // - Restrict create, update, and delete strictly to jinsoop10@gmail.com (email_verified: true)

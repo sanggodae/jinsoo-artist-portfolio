@@ -55,7 +55,7 @@ export interface Award {
   displayOrder: number;
 }
 
-export type PortfolioMenu = 'COVER' | 'CV' | 'ARTIST_NOTE' | 'WORKS_LIST' | 'WORKS' | 'CONTACT' | 'SUBMISSION';
+export type PortfolioMenu = 'COVER' | 'CV' | 'ARTIST_NOTE' | 'WORKS_LIST' | 'WORKS' | 'BOARD' | 'CONTACT' | 'SUBMISSION';
 
 export type CVCategory =
   | 'education'
@@ -96,8 +96,12 @@ export interface ArtistNoteItem {
   id: string; // 'note-a' | 'note-b'
   key: 'A' | 'B';
   title: string;
+  titleEn?: string;
   writtenYear: number;
   content: string;
+  contentKo?: string;
+  contentEn?: string;
+  isCustomEnglish?: boolean;
   critiqueAuthor?: string;
   updatedAt?: string;
 }
@@ -155,4 +159,21 @@ export interface MigrationProgressItem {
   errorMessage?: string;
   failedStage?: 'Storage' | 'Firestore';
 }
+
+export type BoardPostStatus = 'pending' | 'published' | 'rejected';
+
+export interface BoardPost {
+  id: string;
+  title: string;
+  content: string;
+  coverImage?: string;
+  imageUrls: string[];
+  videoUrls: string[];
+  createdAt: string;
+  updatedAt: string;
+  status: BoardPostStatus;
+  authorName: string;
+  isAdminPost: boolean;
+}
+
 

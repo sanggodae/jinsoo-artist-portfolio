@@ -13,6 +13,7 @@ const BASE_MENU_ITEMS: { key: PortfolioMenu; label: string; subLabel: string }[]
   { key: 'ARTIST_NOTE', label: 'ARTIST NOTE', subLabel: '작가노트' },
   { key: 'WORKS_LIST', label: 'WORKS LIST', subLabel: '작품목록' },
   { key: 'WORKS', label: 'WORKS', subLabel: '작품 갤러리' },
+  { key: 'BOARD', label: 'BOARD', subLabel: '작업/전시일지' },
   { key: 'CONTACT', label: 'CONTACT', subLabel: '연락처' },
 ];
 

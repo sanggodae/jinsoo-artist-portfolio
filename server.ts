@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { getAdminAuth } from './src/server/firebaseAdmin.ts';
 import { sendCustomerInquiry } from './src/server/emailService.ts';
+import { translateArtistNote } from './src/server/translationService.ts';
 
 const ALLOWED_BOOTSTRAP_EMAIL = 'jinsoop10@gmail.com';
 
@@ -171,6 +172,35 @@ async function startServer() {
       return res.status(400).json({
         success: false,
         error: err.message || '문의 전송 중 오류가 발생했습니다.',
+      });
+    }
+  });
+
+  /**
+   * Artist Note Auto-Translation Endpoint
+   * Translates Korean fine art statements into literary English using Gemini / fallback.
+   */
+  app.post('/api/translate/artist-note', async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: '번역할 텍스트가 전달되지 않았습니다.',
+        });
+      }
+
+      const result = await translateArtistNote(text);
+      return res.json({
+        success: true,
+        translation: result.translation,
+        source: result.source,
+      });
+    } catch (err: any) {
+      console.error('[Translation Route Error]:', err.message);
+      return res.status(500).json({
+        success: false,
+        error: `번역 처리 중 오류 발생: ${err.message}`,
       });
     }
   });

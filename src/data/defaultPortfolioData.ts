@@ -264,6 +264,7 @@ export const DEFAULT_ARTIST_NOTES: ArtistNoteItem[] = [
     id: 'note-a',
     key: 'A',
     title: '헤테로토피아(HeteroTopia)와 경계의 물질성',
+    titleEn: 'HeteroTopia and the Materiality of the Threshold',
     writtenYear: 2026,
     content: `나의 회화는 존재와 부재, 현실과 이상이 교차하는 제3의 공간인 '헤테로토피아(HeteroTopia)'를 시각화하는 과정이다.
 
@@ -272,17 +273,32 @@ export const DEFAULT_ARTIST_NOTES: ArtistNoteItem[] = [
 반복적인 붓질과 색면의 중첩 속에서 화면은 고요한 긴장감과 내면의 깊은 울림을 획득하며, 관객으로 하여금 일상의 지각 너머에 존재하는 초월적 침묵을 경험하게 한다.
 
 물질의 본성과 색채의 미묘한 파동을 탐구하며 캔버스라는 제한된 평면을 열린 사유의 장소로 전환하고자 한다.`,
+    contentEn: `My painting is a process of visualizing 'HeteroTopia'—a third space where presence and absence, reality and the ideal intersect.
+
+Transcending mere visual representation, the physical strata of pigments and matière accumulated layer upon layer on the canvas serve as geological layers of memory where time has settled, and as a surface of contemplation.
+
+Through repetitive brushstrokes and overlapping planes of color, the surface acquires a serene tension and a profound inner resonance, inviting the viewer to experience a transcendent silence that lies beyond everyday perception.
+
+By exploring the intrinsic nature of matter and the subtle vibrations of color, I seek to transform the bounded plane of the canvas into an open realm of meditation.`,
+    isCustomEnglish: false,
   },
   {
     id: 'note-b',
     key: 'B',
     title: '새벽의 층위와 침묵의 회화: 물질과 사유의 만남',
+    titleEn: 'Strata of Dawn and the Painting of Silence: Encounter of Matter and Contemplation',
     writtenYear: 2025,
     content: `어둠과 빛이 교차하는 새벽의 시간성은 나에게 끊임없는 영감의 원천이다.
 
 화면 속에서 질료(Material)는 단순한 도구가 아니라 스스로 호흡하는 주체로 기능한다. 캔버스라는 물리적 지지체 위에서 일어나는 물성과 호흡의 충돌, 그리고 그 흔적이 만들어내는 미세한 진동은 비어 있음과 채워짐 사이의 근원적 균형을 탐구한다.
 
 그려냄(Painting)과 지워냄(Erasing), 덧바름과 긁어냄의 긴장 관계 속에서 나타나는 형상들은 가시적인 세계의 이면에 잠재된 생명의 근원적 에너지를 환기한다.`,
+    contentEn: `The temporality of dawn, where darkness and light intersect, serves as an inexhaustible source of inspiration for me.
+
+Within the pictorial space, material functions not merely as a tool, but as a living agent that breathes on its own. The collision between materiality and breath unfolding upon the physical support of the canvas, along with the delicate vibrations produced by its traces, explores a primordial equilibrium between emptiness and fullness.
+
+In the dialectical tension between painting and erasing, layering and scraping away, the emerging forms evoke the fundamental energy of life latent beneath the surface of the visible world.`,
+    isCustomEnglish: false,
   },
 ];
 

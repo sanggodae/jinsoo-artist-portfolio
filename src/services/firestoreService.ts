@@ -19,7 +19,10 @@ import {
   SiteSettings,
   SubmissionPackage,
   MigrationStepStatus,
+  BoardPost,
+  BoardPostStatus,
 } from '../types';
+import { DEFAULT_BOARD_POSTS } from '../data/defaultBoardData';
 import {
   uploadBase64ToStorage,
   isFirebaseStorageUrl,
@@ -37,6 +40,7 @@ const COLLECTIONS = {
   ARTIST_NOTES: 'artistNotes',
   SITE_SETTINGS: 'siteSettings',
   SUBMISSIONS: 'submissions',
+  BOARD_POSTS: 'boardPosts',
 } as const;
 
 /* =========================================================
@@ -662,4 +666,77 @@ export async function testSmallFirestoreConnection(): Promise<FirestoreConnectio
     };
   }
 }
+
+/* =========================================================
+   8. Board Posts (작가의 기록 / 작업일지 / 전시일지)
+   ========================================================= */
+
+/**
+ * Fetches board posts from Firestore 'boardPosts' collection.
+ * If visitor, returns only published posts. If admin, returns all (pending, published, rejected).
+ * If Firestore collection is empty, seeds/returns DEFAULT_BOARD_POSTS for initial exhibition.
+ */
+export async function fetchBoardPostsFromFirestore(isAdminUser: boolean = false): Promise<BoardPost[]> {
+  try {
+    const dbInstance = getFirebaseFirestore();
+    const snap = await getDocs(collection(dbInstance, COLLECTIONS.BOARD_POSTS));
+    
+    if (snap.empty) {
+      return DEFAULT_BOARD_POSTS;
+    }
+
+    const posts = snap.docs.map((d) => d.data() as BoardPost);
+    
+    // Sort descending by createdAt (newest first)
+    posts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    if (isAdminUser) {
+      return posts;
+    }
+
+    // General visitors strictly only see published posts
+    return posts.filter((p) => p.status === 'published');
+  } catch (err) {
+    console.warn('[Firestore] Failed to fetch boardPosts, using fallback data:', err);
+    return DEFAULT_BOARD_POSTS;
+  }
+}
+
+/**
+ * Saves or updates a Board post in Firestore 'boardPosts/{id}'.
+ */
+export async function saveBoardPostToFirestore(post: BoardPost): Promise<void> {
+  const dbInstance = getFirebaseFirestore();
+  const docRef = doc(dbInstance, COLLECTIONS.BOARD_POSTS, post.id);
+  await setDoc(docRef, post, { merge: true });
+}
+
+/**
+ * Updates a Board post's approval status (pending | published | rejected).
+ */
+export async function updateBoardPostStatusInFirestore(
+  postId: string,
+  status: BoardPostStatus
+): Promise<void> {
+  const dbInstance = getFirebaseFirestore();
+  const docRef = doc(dbInstance, COLLECTIONS.BOARD_POSTS, postId);
+  await setDoc(
+    docRef,
+    {
+      status,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Deletes a Board post from Firestore.
+ */
+export async function deleteBoardPostFromFirestore(postId: string): Promise<void> {
+  const dbInstance = getFirebaseFirestore();
+  const docRef = doc(dbInstance, COLLECTIONS.BOARD_POSTS, postId);
+  await deleteDoc(docRef);
+}
+
 
