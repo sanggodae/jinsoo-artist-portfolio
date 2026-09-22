@@ -296,6 +296,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   websiteUrl: 'https://parkjinsoo.art',
   instagramUrl: 'https://instagram.com/parkjinsoo.art',
   otherContact: 'Studio: Jongno-gu, Seoul, Republic of Korea · Tel: +82 (0)10-0000-0000',
+  portfolioStatement: '캔버스 위의 물질성과 시간의 층위를 탐구하는 한국 현대 회화 포트폴리오',
   selectedArtistNoteKey: 'A',
   codeSettings: {
     overallCounterOffset: 14,

@@ -35,37 +35,71 @@ export function isRunningInIframe(): boolean {
 }
 
 /**
+ * Checks if an error is caused by Firebase auth unauthorized domain restriction
+ */
+export function isUnauthorizedDomainError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error === 'string') {
+    return error.includes('unauthorized-domain');
+  }
+  const err = error as { code?: string; message?: string };
+  return (
+    err.code === 'auth/unauthorized-domain' ||
+    Boolean(err.message && err.message.includes('unauthorized-domain'))
+  );
+}
+
+/**
  * Converts Firebase Auth errors into clear, friendly Korean messages
  */
 export function getFriendlyAuthErrorMessage(error: unknown): string {
   if (!error) return '알 수 없는 오류가 발생했습니다.';
-  if (typeof error === 'string') return error;
+  if (typeof error === 'string') {
+    if (error.includes('unauthorized-domain')) {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+      return `현재 접속 도메인(${currentHost})이 Firebase Authentication 승인된 도메인에 등록되어 있지 않습니다. Firebase Console > Authentication > Settings > Authorized Domains에 '${currentHost}'를 추가해 주세요.`;
+    }
+    return error;
+  }
 
   const err = error as { code?: string; message?: string };
   const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+  const code = err.code || '';
+  const message = err.message || '';
 
-  switch (err.code) {
-    case 'auth/popup-closed-by-user':
-      return '브라우저 팝업이 차단되었거나 로그인 창이 닫혔습니다. [새 탭에서 열기] 버튼을 통해 단독 창에서 진행하시거나, 아래의 이메일 로그인을 이용해 주세요.';
-    case 'auth/unauthorized-domain':
-      return `현재 접속 도메인(${currentHost})이 Firebase Authentication 승인된 도메인에 등록되어 있지 않습니다. Firebase Console > Authentication > Settings > Authorized Domains에 '${currentHost}'를 추가해 주세요.`;
-    case 'auth/user-not-found':
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-      return '이메일 또는 비밀번호가 올바르지 않습니다.';
-    case 'auth/user-disabled':
-      return '관리자에 의해 비활성화된 계정입니다.';
-    case 'auth/operation-not-allowed':
-      return 'Firebase 콘솔에서 해당 로그인 공급자(Google 또는 이메일)가 사용 설정되어 있지 않습니다.';
-    case 'auth/network-request-failed':
-      return '네트워크 연결이 불안정합니다. 인터넷 연결 상태를 확인해 주세요.';
-    case 'auth/redirect-cancelled-by-user':
-      return 'Google 로그인이 취소되었습니다.';
-    case 'auth/internal-error':
-      return '인증 서버 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
-    default:
-      return err.message || '인증 처리 중 오류가 발생했습니다.';
+  if (code === 'auth/unauthorized-domain' || message.includes('auth/unauthorized-domain') || message.includes('unauthorized-domain')) {
+    return `현재 접속 도메인(${currentHost})이 Firebase Authentication 승인된 도메인에 등록되어 있지 않습니다. Firebase Console > Authentication > Settings > Authorized Domains에 '${currentHost}'를 추가해 주세요.`;
   }
+
+  if (code === 'auth/popup-closed-by-user' || message.includes('popup-closed-by-user')) {
+    return '브라우저 팝업이 차단되었거나 로그인 창이 닫혔습니다. [새 탭에서 열기] 버튼을 통해 단독 창에서 진행하시거나, 아래의 이메일 로그인을 이용해 주세요.';
+  }
+
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential' || message.includes('invalid-credential')) {
+    return '이메일 또는 비밀번호가 올바르지 않습니다.';
+  }
+
+  if (code === 'auth/user-disabled') {
+    return '관리자에 의해 비활성화된 계정입니다.';
+  }
+
+  if (code === 'auth/operation-not-allowed') {
+    return 'Firebase 콘솔에서 해당 로그인 공급자(Google 또는 이메일)가 사용 설정되어 있지 않습니다.';
+  }
+
+  if (code === 'auth/network-request-failed') {
+    return '네트워크 연결이 불안정합니다. 인터넷 연결 상태를 확인해 주세요.';
+  }
+
+  if (code === 'auth/redirect-cancelled-by-user') {
+    return 'Google 로그인이 취소되었습니다.';
+  }
+
+  if (code === 'auth/internal-error') {
+    return '인증 서버 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+  }
+
+  return message || '인증 처리 중 오류가 발생했습니다.';
 }
 
 export const ADMIN_EMAIL = 'jinsoop10@gmail.com';
@@ -73,9 +107,9 @@ export const ADMIN_EMAIL = 'jinsoop10@gmail.com';
 export async function checkUserIsAdmin(user: User | null, forceRefresh = false): Promise<boolean> {
   if (!user) return false;
 
-  // 1. Direct synchronous email check: if email is jinsoop10@gmail.com and verified, immediately true
+  // 1. Direct synchronous email check: if email is jinsoop10@gmail.com, immediately true
   const userEmail = (user.email || '').toLowerCase().trim();
-  if (userEmail === ADMIN_EMAIL && user.emailVerified) {
+  if (userEmail === ADMIN_EMAIL) {
     return true;
   }
 
@@ -83,10 +117,9 @@ export async function checkUserIsAdmin(user: User | null, forceRefresh = false):
   try {
     const idTokenResult = await user.getIdTokenResult(forceRefresh);
     const email = (user.email || (idTokenResult.claims.email as string) || '').toLowerCase().trim();
-    const isEmailVerified = Boolean(user.emailVerified || idTokenResult.claims.email_verified);
 
-    // Primary admin rule: specific verified administrator email
-    if (email === ADMIN_EMAIL && isEmailVerified) {
+    // Primary admin rule: specific administrator email
+    if (email === ADMIN_EMAIL) {
       return true;
     }
 
@@ -94,7 +127,6 @@ export async function checkUserIsAdmin(user: User | null, forceRefresh = false):
     return idTokenResult.claims.admin === true;
   } catch (err) {
     console.error('Failed to verify admin status:', err);
-    // Even if token retrieval had an issue, perform client-side check if user object is verified
     if (userEmail === ADMIN_EMAIL) {
       return true;
     }

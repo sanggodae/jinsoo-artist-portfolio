@@ -1,23 +1,80 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Artwork, PortfolioMenu, SiteSettings } from '../../types';
-import { ArrowRight, ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Star, Pencil, Check, Loader2 } from 'lucide-react';
 import { formatMaterialOnCanvas } from '../../utils/formatters';
 import { getArtistProfile } from '../../utils/artistProfile';
+import { useAuth } from '../../contexts/AuthContext';
+import { updatePortfolioStatementInFirestore } from '../../services/firestoreService';
 
 interface CoverViewProps {
   artworks: Artwork[];
   settings: SiteSettings;
+  isAdmin?: boolean;
   onNavigate: (tab: PortfolioMenu) => void;
   onSelectArtwork?: (artwork: Artwork) => void;
+  onUpdateSettings?: (settings: SiteSettings) => void;
 }
 
 export const CoverView: React.FC<CoverViewProps> = ({
   artworks,
   settings,
+  isAdmin: propIsAdmin,
   onNavigate,
   onSelectArtwork,
+  onUpdateSettings,
 }) => {
+  const { isAdmin: authIsAdmin } = useAuth();
+  const isAdmin = propIsAdmin !== undefined ? propIsAdmin : authIsAdmin;
   const artist = getArtistProfile(settings);
+
+  const defaultStatement = '캔버스 위의 물질성과 시간의 층위를 탐구하는 한국 현대 회화 포트폴리오';
+  const currentStatement = settings.portfolioStatement || defaultStatement;
+
+  const [isEditingStatement, setIsEditingStatement] = useState(false);
+  const [statementInput, setStatementInput] = useState(currentStatement);
+  const [isSavingStatement, setIsSavingStatement] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Sync statement input when settings change
+  useEffect(() => {
+    if (!isEditingStatement) {
+      setStatementInput(settings.portfolioStatement || defaultStatement);
+    }
+  }, [settings.portfolioStatement, isEditingStatement, defaultStatement]);
+
+  const handleSaveStatement = async () => {
+    const trimmed = statementInput.trim();
+    if (!trimmed) {
+      setSaveError('Statement 내용을 입력해 주세요.');
+      return;
+    }
+
+    setIsSavingStatement(true);
+    setSaveError(null);
+
+    try {
+      await updatePortfolioStatementInFirestore(trimmed);
+      const updatedSettings: SiteSettings = {
+        ...settings,
+        portfolioStatement: trimmed,
+        updatedAt: new Date().toISOString(),
+      };
+      if (onUpdateSettings) {
+        onUpdateSettings(updatedSettings);
+      }
+      try {
+        localStorage.setItem('PARK_JINSOO_SITE_SETTINGS_V1', JSON.stringify(updatedSettings));
+      } catch {
+        // ignore
+      }
+      setIsEditingStatement(false);
+    } catch (err: any) {
+      console.error('[CoverView] Failed to save statement to Firestore:', err);
+      setSaveError(err.message || '저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingStatement(false);
+    }
+  };
 
   // 1. Filter only artworks with isFeatured === true, sorted strictly by displayOrder
   const featuredArtworks = useMemo(() => {
@@ -145,9 +202,91 @@ export const CoverView: React.FC<CoverViewProps> = ({
                 </div>
 
                 <div className="pt-3 border-t border-neutral-300/80 max-w-sm">
-                  <p className="text-xs sm:text-sm text-neutral-600 font-light leading-relaxed">
-                    캔버스 위의 물질성과 시간의 층위를 탐구하는 한국 현대 회화 포트폴리오
-                  </p>
+                  {isEditingStatement ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 font-medium">
+                          Statement 수정
+                        </span>
+                        <span className="text-[10px] text-neutral-400 font-mono">
+                          {statementInput.length}자
+                        </span>
+                      </div>
+                      <textarea
+                        id="statement-edit-textarea"
+                        value={statementInput}
+                        onChange={(e) => setStatementInput(e.target.value)}
+                        placeholder="포트폴리오 Statement 문구를 입력하세요..."
+                        rows={3}
+                        className="w-full text-xs sm:text-sm text-neutral-800 bg-white border border-neutral-400 focus:border-neutral-950 rounded-none p-2.5 font-light leading-relaxed focus:outline-none transition-all resize-y shadow-xs"
+                        disabled={isSavingStatement}
+                        autoFocus
+                      />
+                      {saveError && (
+                        <p className="text-[11px] text-rose-600 font-normal">
+                          {saveError}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          id="statement-edit-cancel-btn"
+                          onClick={() => {
+                            setIsEditingStatement(false);
+                            setStatementInput(currentStatement);
+                            setSaveError(null);
+                          }}
+                          disabled={isSavingStatement}
+                          className="px-2.5 py-1 text-xs text-neutral-600 hover:text-neutral-900 border border-neutral-200 hover:border-neutral-300 transition-colors cursor-pointer bg-white"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="button"
+                          id="statement-edit-save-btn"
+                          onClick={handleSaveStatement}
+                          disabled={isSavingStatement}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1 text-xs bg-neutral-900 hover:bg-neutral-800 text-white transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {isSavingStatement ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>저장 중...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3 h-3" />
+                              <span>저장</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-xs sm:text-sm text-neutral-600 font-light leading-relaxed flex-1">
+                          {currentStatement}
+                        </p>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            id="statement-edit-btn"
+                            onClick={() => {
+                              setStatementInput(currentStatement);
+                              setIsEditingStatement(true);
+                              setSaveError(null);
+                            }}
+                            className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-neutral-600 hover:text-neutral-950 border border-neutral-300 hover:border-neutral-900 bg-white transition-all cursor-pointer shadow-2xs font-normal"
+                            title="Statement 수정 (관리자 전용)"
+                          >
+                            <Pencil className="w-3 h-3 text-neutral-500" />
+                            <span>수정</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

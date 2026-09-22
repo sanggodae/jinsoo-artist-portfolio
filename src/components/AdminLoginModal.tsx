@@ -14,11 +14,13 @@ import {
   UploadCloud,
   Database,
   AlertCircle,
+  Globe,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { loadArtworksFromIndexedDB, loadArtworksFromStorage } from '../utils/storage';
 import { checkArtworkExistsInFirestore, migrateArtworkToFirestoreWithSkip } from '../services/firestoreService';
 import { uploadBlobToStorage, getArtworkStoragePaths } from '../services/storageService';
+import { isUnauthorizedDomainError, getFriendlyAuthErrorMessage } from '../services/authService';
 import { Artwork } from '../types';
 
 interface AdminLoginModalProps {
@@ -49,6 +51,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
+  const [copiedHost, setCopiedHost] = useState(false);
+  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [tokenClaims, setTokenClaims] = useState<Record<string, unknown> | null>(null);
   const [syncStatus, setSyncStatus] = useState<{
@@ -180,6 +184,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     if (isOpen) {
       setErrorMsg(null);
       setInfoMsg(null);
+      setIsUnauthorizedDomain(false);
       clearRedirectError();
       if (user) {
         refreshAdminStatus();
@@ -199,6 +204,14 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
 
   const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
 
+  const handleCopyHost = (host: string) => {
+    if (typeof navigator !== 'undefined') {
+      navigator.clipboard.writeText(host);
+      setCopiedHost(true);
+      setTimeout(() => setCopiedHost(false), 2500);
+    }
+  };
+
   const handleOpenInNewTab = () => {
     if (typeof window !== 'undefined') {
       window.open(window.location.href, '_blank');
@@ -208,6 +221,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
   const handleGooglePopup = async () => {
     setErrorMsg(null);
     setInfoMsg(null);
+    setIsUnauthorizedDomain(false);
     clearRedirectError();
     setIsPopupLoading(true);
     try {
@@ -234,12 +248,15 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
         await fetchCurrentClaims();
       }
     } catch (err: unknown) {
-      if (err instanceof Error) {
+      if (isUnauthorizedDomainError(err)) {
+        setIsUnauthorizedDomain(true);
+        setErrorMsg(getFriendlyAuthErrorMessage(err));
+      } else if (err instanceof Error) {
         // If popup was closed or blocked, provide direct guidance
         if (err.message.includes('popup-closed-by-user')) {
           setErrorMsg('브라우저에서 팝업이 차단되었거나 로그인 창이 닫혔습니다. 아래 [새 창(새 탭)에서 열기] 버튼을 이용하시면 팝업 차단 없이 즉시 로그인할 수 있습니다.');
         } else {
-          setErrorMsg(err.message);
+          setErrorMsg(getFriendlyAuthErrorMessage(err));
         }
       } else {
         setErrorMsg('Google 로그인 처리 중 오류가 발생했습니다.');
@@ -252,6 +269,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
   const handleGoogleRedirect = async () => {
     setErrorMsg(null);
     setInfoMsg(null);
+    setIsUnauthorizedDomain(false);
     clearRedirectError();
 
     // If inside an iframe, warn that accounts.google.com blocks iframe redirect
@@ -265,8 +283,11 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
       await loginWithGoogle();
     } catch (err: unknown) {
       setIsRedirecting(false);
-      if (err instanceof Error) {
-        setErrorMsg(err.message);
+      if (isUnauthorizedDomainError(err)) {
+        setIsUnauthorizedDomain(true);
+        setErrorMsg(getFriendlyAuthErrorMessage(err));
+      } else if (err instanceof Error) {
+        setErrorMsg(getFriendlyAuthErrorMessage(err));
       } else {
         setErrorMsg('Google 로그인 페이지로 이동하는 중 오류가 발생했습니다.');
       }
@@ -283,8 +304,11 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
       await loginWithEmail(email, password);
       // Success will update the user state via onAuthStateChanged
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setErrorMsg(err.message);
+      if (isUnauthorizedDomainError(err)) {
+        setIsUnauthorizedDomain(true);
+        setErrorMsg(getFriendlyAuthErrorMessage(err));
+      } else if (err instanceof Error) {
+        setErrorMsg(getFriendlyAuthErrorMessage(err));
       } else {
         setErrorMsg('로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.');
       }
@@ -347,6 +371,10 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
   };
 
   const activeError = redirectError || errorMsg;
+  const isUnauthorizedDomainActive =
+    isUnauthorizedDomain ||
+    isUnauthorizedDomainError(errorMsg) ||
+    isUnauthorizedDomainError(redirectError);
 
   return (
     <div
@@ -684,7 +712,75 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
                 일반 방문자는 로그인 없이 갤러리 작품과 포트폴리오를 자유롭게 열람하실 수 있습니다. 작품 등록·수정·삭제를 위해 관리자로 로그인해 주세요.
               </p>
 
-              {activeError && (
+              {/* Unauthorized Domain Resolution Banner */}
+              {isUnauthorizedDomainActive ? (
+                <div className="p-4 bg-amber-50/90 border border-amber-300 rounded text-xs space-y-3 shadow-xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-amber-950 text-xs">
+                        Firebase Authentication 승인된 도메인(Authorized Domain) 등록 필요
+                      </h4>
+                      <p className="text-[11px] text-amber-900 leading-relaxed">
+                        현재 접속 환경의 도메인이 Firebase 인증 허용 목록에 등록되지 않아 Google 로그인이 차단되었습니다.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Safety Assurance Badge */}
+                  <div className="p-2.5 bg-white/90 border border-amber-200 rounded text-[11px] text-neutral-700 leading-relaxed space-y-1">
+                    <div className="flex items-center gap-1.5 font-medium text-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>기존 Firestore 데이터베이스 및 컬렉션 100% 안전 유지</span>
+                    </div>
+                    <p className="text-neutral-600 text-[10.5px]">
+                      연결된 Firebase 프로젝트(<code className="font-mono bg-neutral-100 px-1 py-0.5 rounded text-neutral-800">gen-lang-client-0635539736</code>) 및 기존 작품 데이터는 일체 변경되거나 삭제되지 않습니다. 도메인 허용 설정만 추가하시면 즉시 정상 작동합니다.
+                    </p>
+                  </div>
+
+                  {/* Domain to copy */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-semibold text-neutral-800">
+                      Firebase 콘솔에 추가할 도메인:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-white border border-amber-300 px-2.5 py-1.5 rounded text-[11px] font-mono text-neutral-900 select-all truncate">
+                        {currentHost || 'ais-pre-nbrkcsb3qv3ljs4oaebcvj-536497088671.asia-east1.run.app'}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyHost(currentHost || 'ais-pre-nbrkcsb3qv3ljs4oaebcvj-536497088671.asia-east1.run.app')}
+                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded text-[11px] font-medium transition-colors cursor-pointer"
+                        title="도메인 주소 복사"
+                      >
+                        {copiedHost ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedHost ? '복사됨' : '도메인 복사'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3-Step Setup Instructions */}
+                  <div className="space-y-1 text-[11px] text-neutral-800 bg-amber-100/60 p-2.5 rounded border border-amber-200">
+                    <p className="font-semibold text-amber-950">간단 설정 3단계:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-[10.5px] leading-relaxed text-neutral-700">
+                      <li>위 <strong>[도메인 복사]</strong> 버튼을 클릭합니다.</li>
+                      <li>아래 <strong>[Firebase 콘솔 설정 바로가기]</strong> 버튼을 클릭하여 설정 페이지로 이동합니다.</li>
+                      <li><strong>[승인된 도메인] &gt; [도메인 추가]</strong>를 누르고 붙여넣은 뒤 저장합니다.</li>
+                    </ol>
+                  </div>
+
+                  {/* Link Button to Firebase Console */}
+                  <a
+                    href="https://console.firebase.google.com/project/gen-lang-client-0635539736/authentication/settings"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-medium transition-colors shadow-2xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Firebase Console 승인된 도메인 설정 열기</span>
+                  </a>
+                </div>
+              ) : activeError ? (
                 <div className="p-3.5 bg-rose-50 border border-rose-200 rounded text-xs text-rose-700 flex items-start gap-2.5">
                   <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
                   <div className="space-y-0.5">
@@ -692,7 +788,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
                     <p className="leading-relaxed">{activeError}</p>
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Primary Method: Google Login */}
               <div className="p-4 bg-neutral-50 border border-neutral-200 rounded space-y-3">

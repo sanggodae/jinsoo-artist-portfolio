@@ -71,7 +71,17 @@ export default function App() {
   // Portfolio Content States (CV, Artist Notes, Contact & Site Settings)
   const [cvSections, setCvSections] = useState<CVSection[]>(DEFAULT_CV_SECTIONS);
   const [artistNotes, setArtistNotes] = useState<ArtistNoteItem[]>(DEFAULT_ARTIST_NOTES);
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    try {
+      const cached = localStorage.getItem('PARK_JINSOO_SITE_SETTINGS_V1');
+      if (cached) {
+        return { ...DEFAULT_SITE_SETTINGS, ...JSON.parse(cached) };
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_SITE_SETTINGS;
+  });
 
   const artist = getArtistProfile(siteSettings);
 
@@ -137,12 +147,22 @@ export default function App() {
           setArtistNotes(notesList);
         }
         if (settingsData) {
-          setSiteSettings({
-            ...DEFAULT_SITE_SETTINGS,
-            ...settingsData,
-            artistKoreanName: settingsData.artistKoreanName || DEFAULT_SITE_SETTINGS.artistKoreanName,
-            artistHanjaName: settingsData.artistHanjaName || DEFAULT_SITE_SETTINGS.artistHanjaName,
-            artistEnglishName: settingsData.artistEnglishName || DEFAULT_SITE_SETTINGS.artistEnglishName,
+          setSiteSettings((prev) => {
+            const merged: SiteSettings = {
+              ...DEFAULT_SITE_SETTINGS,
+              ...prev,
+              ...settingsData,
+              artistKoreanName: settingsData.artistKoreanName || prev.artistKoreanName || DEFAULT_SITE_SETTINGS.artistKoreanName,
+              artistHanjaName: settingsData.artistHanjaName || prev.artistHanjaName || DEFAULT_SITE_SETTINGS.artistHanjaName,
+              artistEnglishName: settingsData.artistEnglishName || prev.artistEnglishName || DEFAULT_SITE_SETTINGS.artistEnglishName,
+              portfolioStatement: settingsData.portfolioStatement || prev.portfolioStatement || DEFAULT_SITE_SETTINGS.portfolioStatement,
+            };
+            try {
+              localStorage.setItem('PARK_JINSOO_SITE_SETTINGS_V1', JSON.stringify(merged));
+            } catch {
+              // ignore
+            }
+            return merged;
           });
         }
 
@@ -508,8 +528,17 @@ export default function App() {
             <CoverView
               artworks={artworks}
               settings={siteSettings}
+              isAdmin={isAdmin}
               onNavigate={setPortfolioTab}
               onSelectArtwork={setSelectedArtwork}
+              onUpdateSettings={(newSettings) => {
+                setSiteSettings(newSettings);
+                try {
+                  localStorage.setItem('PARK_JINSOO_SITE_SETTINGS_V1', JSON.stringify(newSettings));
+                } catch {
+                  // ignore
+                }
+              }}
             />
           )}
 

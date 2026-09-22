@@ -559,6 +559,22 @@ export async function setSiteSettingsInFirestore(settings: SiteSettings): Promis
 
 export const saveSiteSettingsToFirestore = setSiteSettingsInFirestore;
 
+/**
+ * Updates the Cover portfolioStatement in Firestore siteSettings/general document
+ */
+export async function updatePortfolioStatementInFirestore(statement: string): Promise<void> {
+  const db = getFirebaseFirestore();
+  const docRef = doc(db, COLLECTIONS.SITE_SETTINGS, 'general');
+  await setDoc(
+    docRef,
+    {
+      portfolioStatement: statement,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
 /* =========================================================
    7. Submissions (공모전 / 갤러리 제출 관리 - 관리자 전용)
    ========================================================= */

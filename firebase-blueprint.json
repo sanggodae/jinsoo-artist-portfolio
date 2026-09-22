@@ -94,6 +94,7 @@
         "instagramUrl": { "type": "string", "description": "Instagram link" },
         "coverArtworkId": { "type": "string", "description": "Selected hero artwork ID" },
         "aboutText": { "type": "string", "description": "Biography intro text" },
+        "portfolioStatement": { "type": "string", "description": "Artist statement displayed on Cover page" },
         "updatedAt": { "type": "string", "description": "Update timestamp" }
       },
       "required": ["id", "artistKoreanName", "artistEnglishName"]

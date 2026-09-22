@@ -119,6 +119,7 @@ export interface SiteSettings {
   instagramUrl?: string;
   otherContact?: string;
   coverArtworkId?: string;
+  portfolioStatement?: string;    // 포트폴리오 Cover Statement 문구
   selectedArtistNoteKey: 'A' | 'B';
   codeSettings?: ArtworkCodeSettings;
   updatedAt?: string;
