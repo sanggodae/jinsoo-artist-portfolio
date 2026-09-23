@@ -685,7 +685,27 @@ export async function fetchBoardPostsFromFirestore(isAdminUser: boolean = false)
       return DEFAULT_BOARD_POSTS;
     }
 
-    const posts = snap.docs.map((d) => d.data() as BoardPost);
+    const posts: BoardPost[] = snap.docs.map((d) => {
+      const data = d.data();
+      const postItem: BoardPost = {
+        id: data.id || d.id,
+        title: data.title || '',
+        content: data.content || '',
+        imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
+        videoUrls: Array.isArray(data.videoUrls) ? data.videoUrls : [],
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || new Date().toISOString(),
+        status: (data.status as BoardPostStatus) || 'pending',
+        authorName: data.authorName || '방문자',
+        isAdminPost: Boolean(data.isAdminPost),
+      };
+
+      if (typeof data.coverImage === 'string' && data.coverImage.trim() !== '') {
+        postItem.coverImage = data.coverImage.trim();
+      }
+
+      return postItem;
+    });
     
     // Sort descending by createdAt (newest first)
     posts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -704,11 +724,60 @@ export async function fetchBoardPostsFromFirestore(isAdminUser: boolean = false)
 
 /**
  * Saves or updates a Board post in Firestore 'boardPosts/{id}'.
+ * Ensures no undefined values are ever passed to Firestore setDoc.
+ * Optional fields like `coverImage` are only included if a valid non-empty string exists.
+ * If no photo is attached, `coverImage` is omitted completely (neither null nor undefined is stored).
  */
 export async function saveBoardPostToFirestore(post: BoardPost): Promise<void> {
   const dbInstance = getFirebaseFirestore();
   const docRef = doc(dbInstance, COLLECTIONS.BOARD_POSTS, post.id);
-  await setDoc(docRef, post, { merge: true });
+
+  // Validate that no raw base64 data URLs are being stored into Firestore directly
+  const rawImages = Array.isArray(post.imageUrls) ? post.imageUrls : [];
+  for (const imgUrl of rawImages) {
+    if (typeof imgUrl === 'string' && imgUrl.startsWith('data:')) {
+      throw new Error(
+        '사진 데이터(Base64)는 Firestore 문서에 직접 저장할 수 없습니다. Firebase Storage에 업로드된 URL만 저장할 수 있습니다.'
+      );
+    }
+  }
+
+  if (typeof post.coverImage === 'string' && post.coverImage.startsWith('data:')) {
+    throw new Error(
+      '대표 사진(coverImage) 데이터는 Firestore 문서에 직접 저장할 수 없습니다. Firebase Storage URL만 저장할 수 있습니다.'
+    );
+  }
+
+  // Construct clean document payload without undefined fields
+  const cleanData: Record<string, any> = {
+    id: post.id,
+    title: (post.title || '').trim(),
+    content: (post.content || '').trim(),
+    imageUrls: rawImages.filter((url) => typeof url === 'string' && url.trim() !== ''),
+    videoUrls: Array.isArray(post.videoUrls)
+      ? post.videoUrls.filter((url) => typeof url === 'string' && url.trim() !== '')
+      : [],
+    createdAt: post.createdAt || new Date().toISOString(),
+    updatedAt: post.updatedAt || new Date().toISOString(),
+    status: post.status || 'pending',
+    authorName: (post.authorName || '').trim() || '방문자',
+    isAdminPost: Boolean(post.isAdminPost),
+  };
+
+  // Only store coverImage if valid non-empty string exists.
+  // If no photo exists, coverImage is omitted entirely.
+  if (typeof post.coverImage === 'string' && post.coverImage.trim() !== '') {
+    cleanData.coverImage = post.coverImage.trim();
+  }
+
+  // Safety check: ensure no keys have undefined values
+  for (const key of Object.keys(cleanData)) {
+    if (cleanData[key] === undefined) {
+      delete cleanData[key];
+    }
+  }
+
+  await setDoc(docRef, cleanData);
 }
 
 /**

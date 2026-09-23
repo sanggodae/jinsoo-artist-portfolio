@@ -304,14 +304,10 @@ export async function uploadBoardImage(
     await uploadBytes(storageRef, fileOrBlob, { contentType });
     return await getDownloadURL(storageRef);
   } catch (storageErr: any) {
-    console.warn(`[Firebase Storage] Board image upload to ${destinationPath} failed, attempting local fallback:`, storageErr);
-    // Graceful fallback: convert to base64 Data URL if storage fails in preview sandbox
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(fileOrBlob);
-    });
+    console.error(`[Firebase Storage] Board image upload to ${destinationPath} failed:`, storageErr);
+    throw new Error(
+      `Firebase Storage 사진 업로드 실패 (${storageErr?.message || storageErr}). Firestore에는 사진 파일이 직접 저장되지 않으며 Storage URL만 저장됩니다.`
+    );
   }
 }
 
@@ -344,8 +340,10 @@ export async function uploadBoardVideo(
     await uploadBytes(storageRef, fileOrBlob, { contentType });
     return await getDownloadURL(storageRef);
   } catch (storageErr: any) {
-    console.warn(`[Firebase Storage] Board video upload to ${destinationPath} failed, attempting local fallback:`, storageErr);
-    return URL.createObjectURL(fileOrBlob);
+    console.error(`[Firebase Storage] Board video upload to ${destinationPath} failed:`, storageErr);
+    throw new Error(
+      `Firebase Storage 동영상 업로드 실패 (${storageErr?.message || storageErr}). Storage URL만 저장 가능합니다.`
+    );
   }
 }
 

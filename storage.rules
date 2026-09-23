@@ -15,6 +15,12 @@ service firebase.storage {
       allow write: if isAdmin();
     }
 
+    // Board posts storage: Public read, public create for images and videos (size <= 50MB)
+    match /board/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource.size < 50 * 1024 * 1024;
+    }
+
     // General default fallback
     match /{allPaths=**} {
       allow read: if true;

@@ -16,12 +16,12 @@ service cloud.firestore {
 
     // Board Posts:
     // - Anyone can read published posts; admin can read all (pending/rejected/published)
-    // - Visitors can create ONLY with status == 'pending' and isAdminPost == false
-    // - Only admin can update or delete
+    // - Visitors can create posts directly published (status == 'published' or status == 'pending') with isAdminPost == false
+    // - Admin can create, update, or delete any posts
     match /boardPosts/{postId} {
       allow read: if resource == null || resource.data.status == 'published' || isAdmin();
       allow create: if isAdmin() || (
-        request.resource.data.status == 'pending' &&
+        (request.resource.data.status == 'published' || request.resource.data.status == 'pending') &&
         request.resource.data.isAdminPost == false
       );
       allow update, delete: if isAdmin();

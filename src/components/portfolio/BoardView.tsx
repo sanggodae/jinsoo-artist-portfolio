@@ -59,6 +59,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
   const [visitorNotice, setVisitorNotice] = useState<string | null>(null);
 
   // Form State
+  const [formPostId, setFormPostId] = useState<string>('');
   const [formTitle, setFormTitle] = useState<string>('');
   const [formContent, setFormContent] = useState<string>('');
   const [formAuthorName, setFormAuthorName] = useState<string>('');
@@ -116,7 +117,9 @@ export const BoardView: React.FC<BoardViewProps> = ({
 
   // Open Editor for New Post
   const handleOpenNewPost = () => {
+    const newId = `post_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     setEditingPost(null);
+    setFormPostId(newId);
     setFormTitle('');
     setFormContent('');
     setFormAuthorName(isAdmin ? (settings?.artistEnglishName || 'PARK JIN SOO') : '');
@@ -129,6 +132,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
   // Open Editor for Existing Post (Admin only)
   const handleOpenEditPost = (post: BoardPost) => {
     setEditingPost(post);
+    setFormPostId(post.id);
     setFormTitle(post.title);
     setFormContent(post.content);
     setFormAuthorName(post.authorName);
@@ -143,7 +147,10 @@ export const BoardView: React.FC<BoardViewProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const tempId = editingPost?.id || `post_${Date.now()}`;
+    // Use established post ID or create one
+    const targetPostId = formPostId || editingPost?.id || `post_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    if (!formPostId) setFormPostId(targetPostId);
+
     setUploadProgressText(`사진 ${files.length}장 업로드 중...`);
 
     const newUrls: string[] = [];
@@ -151,7 +158,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         setUploadProgressText(`사진 업로드 중 (${i + 1}/${files.length})...`);
-        const url = await uploadBoardImage(tempId, file);
+        const url = await uploadBoardImage(targetPostId, file);
         newUrls.push(url);
       }
       setFormImageUrls((prev) => {
@@ -187,11 +194,13 @@ export const BoardView: React.FC<BoardViewProps> = ({
       }
     }
 
-    const tempId = editingPost?.id || `post_${Date.now()}`;
+    const targetPostId = formPostId || editingPost?.id || `post_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    if (!formPostId) setFormPostId(targetPostId);
+
     setUploadProgressText('동영상 업로드 중 (잠시만 기다려주세요)...');
 
     try {
-      const url = await uploadBoardVideo(tempId, file);
+      const url = await uploadBoardVideo(targetPostId, file);
       setFormVideoUrls((prev) => [...prev, url]);
     } catch (err: any) {
       alert(`동영상 업로드 실패: ${err?.message || err}`);
@@ -216,8 +225,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
     setIsSubmitting(true);
     try {
       const now = new Date().toISOString();
-      const isNew = !editingPost;
-      const postId = editingPost?.id || `post_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const postId = formPostId || editingPost?.id || `post_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       // Status determination:
       // - If admin is creating or editing: keep existing or default to 'published'
@@ -233,25 +241,41 @@ export const BoardView: React.FC<BoardViewProps> = ({
         postIsAdminPost = false;
       }
 
-      // Determine cover image
-      let finalCover = formCoverImage.trim();
-      if (!finalCover && formImageUrls.length > 0) {
-        finalCover = formImageUrls[0];
+      // Clean up media arrays (strictly exclude empty strings and any raw base64 data URLs)
+      const cleanImages = (formImageUrls || []).filter(
+        (url) => typeof url === 'string' && url.trim() !== '' && !url.startsWith('data:')
+      );
+      const cleanVideos = (formVideoUrls || []).filter(
+        (url) => typeof url === 'string' && url.trim() !== '' && !url.startsWith('data:')
+      );
+
+      // Determine cover image: only when there is an actual valid image
+      const trimmedCover = (formCoverImage || '').trim();
+      let finalCover = '';
+      if (trimmedCover && !trimmedCover.startsWith('data:') && cleanImages.includes(trimmedCover)) {
+        finalCover = trimmedCover;
+      } else if (cleanImages.length > 0) {
+        finalCover = cleanImages[0];
       }
 
       const postData: BoardPost = {
         id: postId,
         title: formTitle.trim(),
         content: formContent.trim(),
-        coverImage: finalCover || undefined,
-        imageUrls: formImageUrls,
-        videoUrls: formVideoUrls,
+        imageUrls: cleanImages,
+        videoUrls: cleanVideos,
         createdAt: editingPost ? editingPost.createdAt : now,
         updatedAt: now,
-        status: postStatus,
+        status: isAdmin ? postStatus : 'published',
         authorName: formAuthorName.trim() || (isAdmin ? 'PARK JIN SOO' : '방문자'),
         isAdminPost: postIsAdminPost,
       };
+
+      // Only assign coverImage property if a valid non-empty photo URL exists.
+      // If no photo exists, coverImage is omitted completely.
+      if (finalCover) {
+        postData.coverImage = finalCover;
+      }
 
       await saveBoardPostToFirestore(postData);
 
@@ -262,10 +286,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
         setSelectedPost(postData);
       }
 
-      if (!isAdmin) {
-        setVisitorNotice('게시물이 관리자 승인 대기 중입니다. 관리자 확인 후 공개됩니다.');
-        setTimeout(() => setVisitorNotice(null), 8000);
-      }
+     
     } catch (err: any) {
       console.error('[BoardView] Save failed:', err);
       alert(`게시물 저장 중 오류가 발생했습니다: ${err?.message || err}`);
@@ -778,7 +799,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
                 <p className="text-xs text-neutral-500 mt-0.5">
                   {isAdmin
                     ? '관리자 권한으로 작성된 글은 즉시 [공개] 상태로 등록됩니다.'
-                    : '방문자가 작성한 글은 작가 승인 후 [공개] 상태로 전환됩니다.'}
+                    : '게시물이 스팸이거나 사회적 문제가 있을 경우 임의로 삭제될 수 있습니다.'}
                 </p>
               </div>
               <button
@@ -795,8 +816,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
               <div className="bg-amber-50/90 border-b border-amber-200/80 px-6 py-3 text-xs text-amber-900 flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  작성하신 게시물은 스팸 방지 및 아카이브 품질 유지를 위해 <strong>관리자 승인 대기</strong> 상태로
-                  저장되며, 작가의 검토 후 사이트에 공개됩니다.
+                  게시물이 스팸이거나 사회적 문제가 있을 경우 임의로 삭제될 수 있습니다.
                 </p>
               </div>
             )}
