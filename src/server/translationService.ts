@@ -46,9 +46,7 @@ function getGenAI(): GoogleGenAI | null {
  * - 작품의 조형적 의미 (formal significance of the artwork)
  */
 const ART_TERMINOLOGY_MAP: Array<[RegExp, string]> = [
-  [/\bheterotopia\b/gi, "'HeteroTopia'"],
-  [/‘HeteroTopia’/g, "'HeteroTopia'"],
-  [/“HeteroTopia”/g, "'HeteroTopia'"],
+  [/['"‘“]?heterotopia['"’”]?/gi, "'HeteroTopia'"],
   [/\bmatiere\b/gi, 'matière'],
   [/\bmatieres\b/gi, 'matières'],
   [/\bpigment and matiere\b/gi, 'pigments and matière'],

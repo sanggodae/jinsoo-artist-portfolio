@@ -73,7 +73,7 @@ export default function App() {
   const [cvSections, setCvSections] = useState<CVSection[]>(DEFAULT_CV_SECTIONS);
   const [artistNotes, setArtistNotes] = useState<ArtistNoteItem[]>(() => {
     try {
-      const cached = localStorage.getItem('PARK_JINSOO_ARTIST_NOTES_V1');
+      const cached = localStorage.getItem('PARK_JINSOO_ARTIST_NOTES_V2');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -158,18 +158,41 @@ export default function App() {
           setCvSections(cvList);
         }
         if (notesList && notesList.length > 0) {
-          const mergedNotes = notesList.map((n) => {
-            const defNote = DEFAULT_ARTIST_NOTES.find((d) => d.key === n.key);
+          const finalNotes = (['A', 'B'] as const).map((key) => {
+            const firestoreNote = notesList.find((n) => n.key === key);
+            const defNote = DEFAULT_ARTIST_NOTES.find((d) => d.key === key)!;
+
+            if (!firestoreNote) {
+              return defNote;
+            }
+
+            const rawContent = firestoreNote.content || firestoreNote.contentKo || defNote.content;
+            const koParagraphs = rawContent.trim().split(/\n\s*\n/).filter(Boolean);
+            const enParagraphs = (firestoreNote.contentEn || '').trim().split(/\n\s*\n/).filter(Boolean);
+
+            let resolvedEnglish = firestoreNote.contentEn;
+            // If the note was not explicitly custom-edited by admin in English,
+            // and the English content is missing or paragraph count does not match the latest Korean text,
+            // provide the complete English translation corresponding to the latest Korean text.
+            if (!firestoreNote.isCustomEnglish) {
+              if (!resolvedEnglish || (koParagraphs.length > 0 && enParagraphs.length !== koParagraphs.length)) {
+                resolvedEnglish = defNote.contentEn;
+              }
+            }
+
             return {
               ...defNote,
-              ...n,
-              contentEn: n.contentEn || defNote?.contentEn || '',
-              isCustomEnglish: n.isCustomEnglish ?? false,
+              ...firestoreNote,
+              content: rawContent,
+              contentKo: rawContent,
+              contentEn: resolvedEnglish || defNote.contentEn,
+              isCustomEnglish: Boolean(firestoreNote.isCustomEnglish),
             };
           });
-          setArtistNotes(mergedNotes);
+
+          setArtistNotes(finalNotes);
           try {
-            localStorage.setItem('PARK_JINSOO_ARTIST_NOTES_V1', JSON.stringify(mergedNotes));
+            localStorage.setItem('PARK_JINSOO_ARTIST_NOTES_V2', JSON.stringify(finalNotes));
           } catch {
             // ignore
           }
@@ -591,7 +614,7 @@ export default function App() {
               onUpdateNotes={(newNotes) => {
                 setArtistNotes(newNotes);
                 try {
-                  localStorage.setItem('PARK_JINSOO_ARTIST_NOTES_V1', JSON.stringify(newNotes));
+                  localStorage.setItem('PARK_JINSOO_ARTIST_NOTES_V2', JSON.stringify(newNotes));
                 } catch {
                   // ignore
                 }

@@ -75,9 +75,7 @@ export async function translateArtistNoteWithGemini(koreanText: string): Promise
  * Fine-art terminology refinement for English translations.
  */
 const ART_TERMINOLOGY_MAP: Array<[RegExp, string]> = [
-  [/\bheterotopia\b/gi, "'HeteroTopia'"],
-  [/‘HeteroTopia’/g, "'HeteroTopia'"],
-  [/“HeteroTopia”/g, "'HeteroTopia'"],
+  [/['"‘“]?heterotopia['"’”]?/gi, "'HeteroTopia'"],
   [/\bmatiere\b/gi, 'matière'],
   [/\bmatieres\b/gi, 'matières'],
   [/\bpigment and matiere\b/gi, 'pigments and matière'],

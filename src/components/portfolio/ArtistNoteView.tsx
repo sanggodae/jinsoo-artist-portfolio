@@ -55,15 +55,30 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
       contentKo: '작가노트 내용이 준비 중입니다.',
     };
 
-  // Fallback to default English translation if contentEn is empty
   const defaultEnglishForNote =
     DEFAULT_ARTIST_NOTES.find((d) => d.key === rawCurrentNote.key)?.contentEn || '';
+
+  // Determine effective English translation:
+  // If the admin has not directly custom-edited English, ensure paragraph count matches Korean text.
+  // If there is a paragraph count mismatch (e.g. 5 Korean vs 4 English), use the complete translation.
+  const koParagraphs = (rawCurrentNote.contentKo || rawCurrentNote.content || '')
+    .trim()
+    .split(/\n\s*\n/)
+    .filter(Boolean);
+  const enParagraphs = (rawCurrentNote.contentEn || '').trim().split(/\n\s*\n/).filter(Boolean);
+
+  let effectiveEnglish = rawCurrentNote.contentEn;
+  if (!rawCurrentNote.isCustomEnglish) {
+    if (!effectiveEnglish || (koParagraphs.length > 0 && enParagraphs.length !== koParagraphs.length)) {
+      effectiveEnglish = defaultEnglishForNote;
+    }
+  }
 
   const currentNote: ArtistNoteItem = {
     ...rawCurrentNote,
     content: rawCurrentNote.contentKo || rawCurrentNote.content,
     contentKo: rawCurrentNote.contentKo || rawCurrentNote.content,
-    contentEn: rawCurrentNote.contentEn || defaultEnglishForNote,
+    contentEn: effectiveEnglish || defaultEnglishForNote,
   };
 
   const selectedForPortfolio = settings.selectedArtistNoteKey || 'A';
@@ -111,39 +126,39 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
     setIsTranslating(false);
   };
 
-  // Save Korean edit (auto-generates full English translation via translateArtistNote, unless English was directly custom-edited)
+  // Save Korean edit:
+  // Rule: 한국어를 수정해도 영어 번역은 (자동 덮어쓰기 되지 않고) 독립적으로 유지/수정될 수 있어야 합니다.
+  // Unless the admin explicitly checked forceRegenerateEn, the existing English content is preserved as-is.
   const handleSaveKoreanEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingNoteKo || !isAdmin) return;
 
     setIsSaving(true);
-    let targetEnglish = editingNoteKo.contentEn || '';
-    const shouldTranslate = !editingNoteKo.isCustomEnglish || forceRegenerateEn;
+    let targetEnglish = currentNote.contentEn || defaultEnglishForNote;
 
-    if (shouldTranslate) {
+    // Only re-translate if admin explicitly requested to overwrite English
+    if (forceRegenerateEn) {
       setIsTranslating(true);
       try {
-        // Submits Korean content to translateArtistNote to process entire block
         const autoTranslatedEn = await translateArtistNote(editingNoteKo.content);
         if (autoTranslatedEn && autoTranslatedEn.trim().length > 0) {
           targetEnglish = autoTranslatedEn.trim();
         }
       } catch (transErr) {
         console.warn('[ArtistNote] Translation failed, preserving existing English:', transErr);
-        // Requirement: 번역 실패 시 기존 영어를 삭제하지 말고, 기존 영어 내용을 그대로 유지하세요.
       } finally {
         setIsTranslating(false);
       }
     }
 
     try {
-      // Store both contentKo and contentEn (and content for backwards compatibility)
       const updatedNote: ArtistNoteItem = {
+        ...currentNote,
         ...editingNoteKo,
         content: editingNoteKo.content,
         contentKo: editingNoteKo.content,
         contentEn: targetEnglish,
-        isCustomEnglish: forceRegenerateEn ? false : Boolean(editingNoteKo.isCustomEnglish),
+        isCustomEnglish: forceRegenerateEn ? false : Boolean(currentNote.isCustomEnglish),
         updatedAt: new Date().toISOString(),
       };
 
@@ -155,9 +170,9 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
       await saveArtistNoteToFirestore(updatedNote);
 
       setSaveSuccessMsg(
-        editingNoteKo.isCustomEnglish && !forceRegenerateEn
-          ? `Artist Note ${updatedNote.key} 한글 수정이 저장되었습니다. (기존 직접 수정한 영문이 안전하게 유지되었습니다.)`
-          : `Artist Note ${updatedNote.key} 한글 수정 및 전체 영문 작가노트 생성이 완료되었습니다.`
+        forceRegenerateEn
+          ? `Artist Note ${updatedNote.key} 한국어 수정 및 새 영어 번역 저장이 완료되었습니다.`
+          : `Artist Note ${updatedNote.key} 한국어 내용이 수정되었습니다. (영어 번역은 독립적으로 안전하게 유지되었습니다.)`
       );
       setTimeout(() => setSaveSuccessMsg(null), 3500);
       handleCloseModal();
@@ -169,7 +184,8 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
     }
   };
 
-  // Save English direct edit (Single-direction translation flow: Korean update triggers English refresh, but English direct edits remain protected)
+  // Save English direct edit:
+  // Rule: 영어를 수정해도 한국어 원문은 절대로 변경하지 않습니다.
   const handleSaveEnglishEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
@@ -178,7 +194,7 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
     const trimmedEn = editingEnglishText.trim();
 
     try {
-      // Korean content (content, contentKo), title, year are NEVER modified when editing English. Zero reverse translation!
+      // Korean original text is STRICTLY preserved. Zero changes to Korean!
       const updatedNote: ArtistNoteItem = {
         ...currentNote,
         content: currentNote.content,
@@ -196,7 +212,7 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
       await saveArtistNoteToFirestore(updatedNote);
 
       setSaveSuccessMsg(
-        `Artist Note ${updatedNote.key} 영문 내용이 저장되었습니다. (한글 원문은 전혀 변경되지 않았습니다.)`
+        `Artist Note ${updatedNote.key} 영어 번역이 저장되었습니다. (한국어 원문은 절대 변경되지 않았습니다.)`
       );
       setTimeout(() => setSaveSuccessMsg(null), 3500);
       handleCloseModal();
@@ -211,9 +227,10 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
   const handleRunEnglishTranslationInModal = async () => {
     setIsTranslating(true);
     try {
-      const autoTranslated = await translateArtistNote(currentNote.contentKo || currentNote.content);
-      if (autoTranslated) {
-        setEditingEnglishText(autoTranslated);
+      const koSource = currentNote.contentKo || currentNote.content;
+      const autoTranslated = await translateArtistNote(koSource);
+      if (autoTranslated && autoTranslated.trim()) {
+        setEditingEnglishText(autoTranslated.trim());
       }
     } catch (err) {
       console.error('[ArtistNote] Manual translation trigger error:', err);
@@ -467,41 +484,27 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
                   />
                 </div>
 
-                {/* Translation Behavior (Requirement 2, 3, 4, 6, 7, 10, 11) */}
-                {editingNoteKo.isCustomEnglish ? (
-                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded space-y-2">
-                    <div className="flex items-start gap-2 text-amber-900 text-xs leading-relaxed">
-                      <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-medium">직접 수정한 영문이 안전하게 유지됩니다</span>
-                        <p className="text-[11px] text-amber-800 mt-0.5">
-                          한글을 수정하여 저장해도 기존에 직접 작성 및 수정한 영문 내용은 자동으로 덮어써지지 않고 그대로 유지됩니다.
-                        </p>
-                      </div>
-                    </div>
-                    <label className="flex items-center gap-2 text-xs text-neutral-800 cursor-pointer pt-1.5 border-t border-amber-200/80">
-                      <input
-                        type="checkbox"
-                        checked={forceRegenerateEn}
-                        onChange={(e) => setForceRegenerateEn(e.target.checked)}
-                        className="rounded border-neutral-300 text-neutral-900 focus:ring-0 cursor-pointer"
-                      />
-                      <span>수정된 한글 내용을 기준으로 영문 전체를 새로 자동 번역하여 덮어쓰기</span>
-                    </label>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-neutral-50 border border-neutral-200 rounded space-y-1">
-                    <div className="flex items-start gap-2 text-neutral-700 text-xs leading-relaxed">
-                      <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-medium text-neutral-900">한글 수정 시 영문 전체 자동 번역</span>
-                        <p className="text-[11px] text-neutral-500 mt-0.5">
-                          저장 시 수정된 한글 전체 내용을 바탕으로 모든 문단이 빠짐없이 1:1 대응 영문으로 자동 번역되어 함께 저장됩니다.
-                        </p>
-                      </div>
+                {/* Independent Language Management Guarantee */}
+                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded space-y-2">
+                  <div className="flex items-start gap-2 text-neutral-800 text-xs leading-relaxed">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-medium text-neutral-900">독립적 언어 관리 (영어 번역 보존)</span>
+                      <p className="text-[11px] text-neutral-600 mt-0.5">
+                        한국어를 수정해도 기존 영어 번역은 자동으로 덮어써지지 않고 안전하게 유지됩니다.
+                      </p>
                     </div>
                   </div>
-                )}
+                  <label className="flex items-center gap-2 text-xs text-neutral-800 cursor-pointer pt-1.5 border-t border-neutral-200">
+                    <input
+                      type="checkbox"
+                      checked={forceRegenerateEn}
+                      onChange={(e) => setForceRegenerateEn(e.target.checked)}
+                      className="rounded border-neutral-300 text-neutral-900 focus:ring-0 cursor-pointer"
+                    />
+                    <span>수정된 한국어 원문을 바탕으로 영어 번역도 새로 자동 생성하여 함께 저장</span>
+                  </label>
+                </div>
 
                 <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-200">
                   <button
@@ -594,7 +597,7 @@ export const ArtistNoteView: React.FC<ArtistNoteViewProps> = ({
                     autoFocus
                   />
                   <p className="text-[11px] text-neutral-500 mt-1.5 leading-relaxed">
-                    * 영문 본문을 직접 수정하여 저장하면 영문 내용만 독립적으로 업데이트되며, 한글 원문은 전혀 변경되지 않습니다. (영문 → 한글 역번역 없음)
+                    * 영어를 수정해도 한국어 원문은 절대로 변경되지 않습니다. (한국어와 영어는 각각 독립적으로 유지 및 수정됩니다.)
                   </p>
                 </div>
 
