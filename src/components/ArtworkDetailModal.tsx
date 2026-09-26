@@ -83,26 +83,33 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
   const hasDescription =
     artwork.description && artwork.description.trim().length > 0;
 
+  const isVertical = Boolean(
+    artwork.heightCm && artwork.widthCm && Number(artwork.heightCm) > Number(artwork.widthCm)
+  );
+  const isHorizontal = Boolean(
+    artwork.heightCm && artwork.widthCm && Number(artwork.widthCm) > Number(artwork.heightCm)
+  );
+
   return (
     <div
       id="artwork-detail-modal-backdrop"
-      className="fixed inset-0 z-50 bg-neutral-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-neutral-950/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto"
       onClick={onClose}
     >
-      {/* Modal Container: Styled as an A4 Landscape Fine Art Dossier Sheet */}
+      {/* Modal Container: Adaptively sized for vertical or horizontal works without empty void */}
       <div
         id="artwork-detail-a4-container"
-        className="relative w-full max-w-5xl bg-[#FCFCFA] border border-neutral-300/80 rounded-xs shadow-2xl overflow-hidden flex flex-col my-auto transition-all text-neutral-900"
-        style={{
-          // Target A4 Landscape proportion on larger screens
-          maxHeight: '92vh',
-        }}
+        className={`relative w-full ${
+          isVertical
+            ? 'max-w-xl sm:max-w-2xl md:max-w-3xl lg:max-w-4xl'
+            : 'max-w-4xl sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl'
+        } bg-[#FCFCFA] border border-neutral-300/80 rounded-xs shadow-2xl overflow-hidden flex flex-col my-auto transition-all text-neutral-900 max-h-[96vh]`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* =========================================================
             1. Top Navigation Toolbar (no-print)
             ========================================================= */}
-        <div className="no-print border-b border-neutral-200 bg-white px-3.5 sm:px-6 py-2.5 flex items-center justify-between select-none">
+        <div className="no-print border-b border-neutral-200 bg-white px-3.5 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between select-none shrink-0">
           {/* Back to WORKS LIST */}
           <div className="flex items-center gap-2 sm:gap-3">
             <button
@@ -185,18 +192,23 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
         </div>
 
         {/* =========================================================
-            2. Main A4 Landscape Body: Scrollable area
+            2. Main Artwork Body: Scrollable area
+            - Minimized top and bottom blank space
+            - Maximized artwork image size (vertical and horizontal responsive)
             ========================================================= */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 flex flex-col items-center justify-start bg-[#FAF9F6] print:p-0 print:m-0 print:bg-white print:overflow-visible">
-          {/* Centered A4 Frame Sheet */}
-          <div className="w-full max-w-4xl flex flex-col items-center print:max-w-full print:w-full">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-2 sm:py-3 flex flex-col items-center justify-start bg-[#FAF9F6] print:p-0 print:m-0 print:bg-white print:overflow-visible">
+          {/* Frame Sheet */}
+          <div className="w-full flex flex-col items-center print:max-w-full print:w-full">
             {/* -----------------------------------------------------
                 2-1. Artwork Image (Centerpiece, original aspect ratio, contain)
+                - Minimized top and bottom gaps
+                - Height expanded up to 84vh for vertical works, 80vh for horizontal works
+                - Object-contain preserves exact 100% original aspect ratio without distortion
                 ----------------------------------------------------- */}
-            <div className="w-full flex items-center justify-center p-2 sm:p-4 bg-transparent select-none relative min-h-[260px] sm:min-h-[380px] md:min-h-[460px] print:min-h-0 print:p-0 print:h-[110mm] print:max-h-[110mm]">
+            <div className="w-full flex items-center justify-center py-1 bg-transparent select-none relative print:min-h-0 print:p-0 print:h-[110mm] print:max-h-[110mm]">
               {imageError ? (
                 /* Fallback for Image Load Failure */
-                <div className="w-full max-w-md py-16 px-6 bg-white border border-neutral-200 rounded text-center flex flex-col items-center justify-center text-neutral-400">
+                <div className="w-full max-w-md py-12 px-6 bg-white border border-neutral-200 rounded text-center flex flex-col items-center justify-center text-neutral-400">
                   <AlertCircle className="w-8 h-8 text-neutral-300 mb-2" />
                   <p className="text-xs sm:text-sm text-neutral-700 font-medium mb-1">
                     작품 이미지를 불러올 수 없습니다.
@@ -206,14 +218,18 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="relative max-w-full h-full flex items-center justify-center">
+                <div className="relative max-w-full flex items-center justify-center">
                   <img
                     src={artwork.imageUrl}
                     alt={artwork.title}
                     referrerPolicy="no-referrer"
                     onLoad={() => setImageLoaded(true)}
                     onError={() => setImageError(true)}
-                    className={`max-h-[55vh] sm:max-h-[58vh] max-w-full w-auto h-auto object-contain shadow-[0_12px_36px_rgba(0,0,0,0.12)] border border-neutral-200/80 bg-white transition-opacity duration-300 print:shadow-none print:border print:border-neutral-300 print:max-h-[108mm] ${
+                    className={`${
+                      isVertical
+                        ? 'max-h-[74vh] sm:max-h-[78vh] md:max-h-[82vh] lg:max-h-[84vh]'
+                        : 'max-h-[70vh] sm:max-h-[74vh] md:max-h-[78vh] lg:max-h-[80vh]'
+                    } max-w-full w-auto h-auto object-contain shadow-[0_12px_36px_rgba(0,0,0,0.12)] border border-neutral-200/80 bg-white transition-opacity duration-300 print:shadow-none print:border print:border-neutral-300 print:max-h-[108mm] ${
                       imageLoaded ? 'opacity-100' : 'opacity-80'
                     }`}
                   />
@@ -222,14 +238,13 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
             </div>
 
             {/* -----------------------------------------------------
-                2-2. Artwork Caption (가로형 2줄 구조 엄격 적용)
-                -----------------------------------------------------
-                첫 번째 줄: 작품번호 | 작품명 | Canvas Size
+                2-2. Artwork Caption (가로형 2줄 구조: 이미지 바로 아래 배치)
+                첫 번째 줄: 작품번호 | 작품명 | Canvas Size (가로 × 세로 cm)
                 두 번째 줄: Material | Year
                 ----------------------------------------------------- */}
-            <div className="w-full max-w-3xl mt-6 sm:mt-8 pt-5 border-t border-neutral-300/80 text-left print:mt-4 print:pt-3 print:max-w-full print:border-t-2 print:border-neutral-800">
+            <div className={`w-full ${isVertical ? 'max-w-2xl sm:max-w-3xl' : 'max-w-4xl sm:max-w-5xl lg:max-w-6xl'} mt-2 sm:mt-2.5 pt-2 sm:pt-2.5 border-t border-neutral-300/80 text-left print:mt-4 print:pt-3 print:max-w-full print:border-t-2 print:border-neutral-800`}>
               {/* Line 1: 작품번호 | 작품명 | Canvas Size */}
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5 text-neutral-900 leading-tight">
+              <div className="flex flex-wrap items-baseline gap-x-2.5 sm:gap-x-3 gap-y-1 text-neutral-900 leading-tight">
                 {/* 작품번호 */}
                 <span className="font-mono-code font-bold text-sm sm:text-base text-neutral-950 tracking-wider">
                   {artwork.code}
@@ -238,20 +253,20 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
                 <span className="text-neutral-300 select-none print:text-neutral-500">|</span>
 
                 {/* 작품명 (Title) */}
-                <h2 className="font-serif-title font-medium text-lg sm:text-2xl text-neutral-950">
+                <h2 className="font-serif-title font-medium text-base sm:text-xl md:text-2xl text-neutral-950">
                   {artwork.title}
                 </h2>
 
                 <span className="text-neutral-300 select-none print:text-neutral-500">|</span>
 
-                {/* Canvas Size (Firestore의 widthCm × heightCm 사용, cm 단위 명기) */}
-                <span className="font-mono-code font-semibold text-xs sm:text-sm text-neutral-800">
+                {/* Canvas Size (Firestore의 widthCm × heightCm 사용, 가로 × 세로 cm 형식) */}
+                <span className="font-mono-code font-semibold text-xs sm:text-sm text-neutral-800 whitespace-nowrap">
                   {artwork.widthCm} × {artwork.heightCm} cm
                 </span>
               </div>
 
               {/* Line 2: Material | Year */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-neutral-600 mt-2 font-sans print:mt-1.5 print:text-neutral-800">
+              <div className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-3 gap-y-1 text-xs sm:text-sm text-neutral-600 mt-1 font-sans print:mt-1.5 print:text-neutral-800">
                 {/* Material (Acrylic on Canvas, Oil on Canvas, Mixed Material on Canvas 변환 표시) */}
                 <span className="text-neutral-800 font-medium">
                   {formatMaterialOnCanvas(artwork.material)}
@@ -277,14 +292,15 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
 
               {/* -----------------------------------------------------
                   2-3. Artwork Description (Year 아래 영역)
-                  단, 작품 설명이 비어 있으면 제목이나 빈 영역을 표시하지 않음
+                  - 작품 설명 때문에 작품 이미지가 작아지지 않음
+                  - 내용이 길어도 잘리지 않고 스크롤하여 전체 확인 가능
                   ----------------------------------------------------- */}
               {hasDescription && (
-                <div className="mt-5 pt-4 border-t border-neutral-200/80 print:mt-3 print:pt-2 print:border-neutral-300">
-                  <span className="text-[11px] font-mono-code tracking-[0.2em] text-neutral-400 uppercase block mb-1.5 font-medium print:text-neutral-700">
+                <div className="mt-2.5 pt-2 border-t border-neutral-200/80 print:mt-3 print:pt-2 print:border-neutral-300">
+                  <span className="text-[10px] sm:text-[11px] font-mono-code tracking-[0.2em] text-neutral-400 uppercase block mb-1 font-medium print:text-neutral-700">
                     [작품 설명]
                   </span>
-                  <p className="text-xs sm:text-sm text-neutral-700 font-light leading-relaxed whitespace-pre-line print:text-black">
+                  <p className="text-xs sm:text-sm text-neutral-700 font-light leading-relaxed whitespace-pre-line text-justify break-words print:text-black">
                     {artwork.description}
                   </p>
                 </div>
