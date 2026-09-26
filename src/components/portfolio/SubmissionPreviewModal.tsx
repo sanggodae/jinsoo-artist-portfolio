@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Artwork, CVSection, ArtistNoteItem, SiteSettings, Submission } from '../../types';
-import { SubmissionPortfolioSheet } from './SubmissionPortfolioSheet';
+import { SubmissionPortfolioSheet, paginateWorksList } from './SubmissionPortfolioSheet';
 import { Printer, X, ArrowLeft, Eye, FileText, Info } from 'lucide-react';
 
 interface SubmissionPreviewModalProps {
@@ -13,6 +13,7 @@ interface SubmissionPreviewModalProps {
   selectedArtistNote: ArtistNoteItem;
   coverArtwork?: Artwork;
   settings: SiteSettings;
+  autoPrint?: boolean;
 }
 
 export const SubmissionPreviewModal: React.FC<SubmissionPreviewModalProps> = ({
@@ -25,44 +26,44 @@ export const SubmissionPreviewModal: React.FC<SubmissionPreviewModalProps> = ({
   selectedArtistNote,
   coverArtwork,
   settings,
+  autoPrint = false,
 }) => {
-  // ESC key handler to close
+  const handlePrint = () => {
+    const originalTitle = document.title;
+    const safeTitle = (submission?.title || 'Portfolio')
+      .replace(/[^a-zA-Z0-9가-힣\s_-]/g, '')
+      .trim()
+      .replace(/\s+/g, '_') || 'Portfolio';
+    document.title = `PARK_JIN_SOO_${safeTitle}`;
+
+    // Direct synchronous call to window.print() bound to user click gesture
+    window.print();
+
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
+  };
+
+  // Keyboard shortcut handlers (ESC to close, Ctrl+P / Cmd+P to print)
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, submission]);
 
   if (!isOpen) return null;
 
-  const totalPages = 4 + selectedArtworks.length;
-
-  const handlePrint = () => {
-    const originalTitle = document.title;
-    // Format sanitized PDF filename: PARK_JIN_SOO_[Submission_Title].pdf
-    let safeTitle = 'Portfolio';
-    if (submission?.title && submission.title.trim().length > 0) {
-      safeTitle = submission.title
-        .replace(/[\\/:*?"<>|#%&{}\\$!'@+`=]/g, '')
-        .trim()
-        .replace(/\s+/g, '_');
-      if (!safeTitle) safeTitle = 'Portfolio';
-    }
-    const pdfFilename = `PARK_JIN_SOO_${safeTitle}`;
-    document.title = pdfFilename;
-
-    window.print();
-
-    // Restore original document title after print dialog closes
-    setTimeout(() => {
-      document.title = originalTitle;
-    }, 1500);
-  };
+  const worksListChunks = paginateWorksList(selectedArtworks);
+  const worksListChunksCount = worksListChunks.length;
+  const totalPages = 3 + worksListChunksCount + selectedArtworks.length;
 
   return (
     <div
@@ -70,7 +71,7 @@ export const SubmissionPreviewModal: React.FC<SubmissionPreviewModalProps> = ({
       className="fixed inset-0 z-50 bg-neutral-900/80 backdrop-blur-xs flex flex-col items-center justify-start overflow-y-auto p-0 sm:p-4 md:p-6 print:p-0 print:bg-white print:static print:overflow-visible"
     >
       {/* Top Floating Action Bar (Hidden during print) */}
-      <div className="no-print sticky top-2 sm:top-4 z-50 w-full max-w-5xl mx-auto px-4 mb-4">
+      <div className="no-print sticky top-2 sm:top-4 z-50 w-full max-w-4xl mx-auto px-4 mb-4">
         <div className="bg-neutral-950/95 text-white border border-neutral-800 rounded-lg shadow-2xl px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           {/* Left: Back & Title */}
           <div className="flex items-center gap-3">
@@ -88,7 +89,7 @@ export const SubmissionPreviewModal: React.FC<SubmissionPreviewModalProps> = ({
                 {submission.title}
               </h2>
               <p className="text-[11px] font-mono-code text-neutral-400">
-                A4 Landscape Dossier · 총 {totalPages}페이지 (COVER, CV, NOTE, LIST, WORKS {selectedArtworks.length}점)
+                A4 Portrait Dossier · 총 {totalPages}페이지 (COVER, CV, NOTE, LIST {worksListChunksCount > 1 ? `(${worksListChunksCount}p)` : ''}, WORKS {selectedArtworks.length}점)
               </p>
             </div>
           </div>
@@ -100,7 +101,7 @@ export const SubmissionPreviewModal: React.FC<SubmissionPreviewModalProps> = ({
               id="print-submission-btn"
               onClick={handlePrint}
               className="flex items-center gap-2 px-4 py-2 rounded text-xs font-semibold bg-white text-neutral-950 hover:bg-neutral-100 shadow-md transition-all active:scale-[0.98]"
-              title="A4 가로 방향으로 인쇄하거나 PDF 파일로 저장합니다."
+              title="A4 세로 방향으로 인쇄하거나 PDF 파일로 저장합니다."
             >
               <Printer className="w-3.5 h-3.5" />
               <span>[PRINT / PDF]</span>
@@ -122,7 +123,7 @@ export const SubmissionPreviewModal: React.FC<SubmissionPreviewModalProps> = ({
           <span className="flex items-center gap-1.5 text-neutral-300">
             <Info className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <span>
-              [PRINT / PDF]를 누른 뒤 인쇄 대상에서 <strong>PDF로 저장(Save as PDF)</strong>을 선택하고, 가로(Landscape) 규격으로 저장하세요.
+              [PRINT / PDF]를 누른 뒤 인쇄 대상에서 <strong>PDF로 저장(Save as PDF)</strong>을 선택하고, 세로(Portrait) 규격으로 저장하세요.
             </span>
           </span>
           <span className="font-mono-code text-neutral-500 hidden md:inline">ESC 키로 닫기</span>
@@ -130,7 +131,7 @@ export const SubmissionPreviewModal: React.FC<SubmissionPreviewModalProps> = ({
       </div>
 
       {/* Main A4 Sheets Container */}
-      <div className="w-full max-w-5xl mx-auto pb-16 print:p-0 print:m-0 print:max-w-full">
+      <div className="w-full max-w-4xl mx-auto pb-16 print:p-0 print:m-0 print:max-w-full">
         <SubmissionPortfolioSheet
           submission={submission}
           selectedArtworks={selectedArtworks}

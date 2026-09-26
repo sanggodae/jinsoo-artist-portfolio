@@ -193,7 +193,7 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
             {/* -----------------------------------------------------
                 2-1. Artwork Image (Centerpiece, original aspect ratio, contain)
                 ----------------------------------------------------- */}
-            <div className="w-full flex items-center justify-center p-2 sm:p-4 bg-transparent select-none relative min-h-[260px] sm:min-h-[380px] md:min-h-[460px] print:min-h-0 print:p-0 print:h-[135mm] print:max-h-[135mm]">
+            <div className="w-full flex items-center justify-center p-2 sm:p-4 bg-transparent select-none relative min-h-[260px] sm:min-h-[380px] md:min-h-[460px] print:min-h-0 print:p-0 print:h-[110mm] print:max-h-[110mm]">
               {imageError ? (
                 /* Fallback for Image Load Failure */
                 <div className="w-full max-w-md py-16 px-6 bg-white border border-neutral-200 rounded text-center flex flex-col items-center justify-center text-neutral-400">
@@ -213,7 +213,7 @@ export const ArtworkDetailModal: React.FC<ArtworkDetailModalProps> = ({
                     referrerPolicy="no-referrer"
                     onLoad={() => setImageLoaded(true)}
                     onError={() => setImageError(true)}
-                    className={`max-h-[55vh] sm:max-h-[58vh] max-w-full w-auto h-auto object-contain shadow-[0_12px_36px_rgba(0,0,0,0.12)] border border-neutral-200/80 bg-white transition-opacity duration-300 print:shadow-none print:border print:border-neutral-300 print:max-h-[130mm] ${
+                    className={`max-h-[55vh] sm:max-h-[58vh] max-w-full w-auto h-auto object-contain shadow-[0_12px_36px_rgba(0,0,0,0.12)] border border-neutral-200/80 bg-white transition-opacity duration-300 print:shadow-none print:border print:border-neutral-300 print:max-h-[108mm] ${
                       imageLoaded ? 'opacity-100' : 'opacity-80'
                     }`}
                   />

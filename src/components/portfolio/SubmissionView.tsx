@@ -70,6 +70,7 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
 
   // Preview modal state
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [autoPrint, setAutoPrint] = useState(false);
 
   // Load Submissions on mount
   useEffect(() => {
@@ -400,7 +401,7 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
 
   return (
     <div id="submission-studio-view" className="w-full py-8 sm:py-10 bg-neutral-50/50 min-h-[85vh]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 no-print">
         {/* =========================================================
             Top Header & Submission Package Selector
             ========================================================= */}
@@ -438,9 +439,12 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
             <button
               type="button"
               id="preview-submission-btn"
-              onClick={() => setIsPreviewOpen(true)}
+              onClick={() => {
+                setAutoPrint(false);
+                setIsPreviewOpen(true);
+              }}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 rounded shadow-xs transition-all active:scale-[0.98]"
-              title="A4 Landscape 5단계 제출본 도록을 전체 화면으로 미리 확인합니다."
+              title="A4 Portrait 5단계 제출본 도록을 전체 화면으로 미리 확인합니다."
             >
               <Eye className="w-3.5 h-3.5" />
               <span>[제출용 포트폴리오 미리보기]</span>
@@ -449,9 +453,11 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
             <button
               type="button"
               id="print-pdf-direct-btn"
-              onClick={() => setIsPreviewOpen(true)}
+              onClick={() => {
+                setIsPreviewOpen(true);
+              }}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-neutral-950 hover:bg-neutral-800 rounded shadow-sm transition-all active:scale-[0.98]"
-              title="미리보기 화면으로 이동 후 A4 가로 인쇄 또는 PDF로 저장합니다."
+              title="A4 세로 방향으로 인쇄하거나 PDF 파일로 저장합니다."
             >
               <Printer className="w-3.5 h-3.5" />
               <span>[PRINT / PDF]</span>
@@ -1058,7 +1064,10 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
           ========================================================= */}
       <SubmissionPreviewModal
         isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
+        onClose={() => {
+          setIsPreviewOpen(false);
+          setAutoPrint(false);
+        }}
         submission={currentSubmission}
         selectedArtworks={resolvedSelectedArtworks}
         cvSections={cvSections}
@@ -1066,6 +1075,7 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
         selectedArtistNote={resolvedArtistNote}
         coverArtwork={resolvedCoverArtwork}
         settings={settings}
+        autoPrint={autoPrint}
       />
     </div>
   );
