@@ -28,31 +28,34 @@ const CANONICAL_SECTIONS = [
  * Calculates estimated row height in pixels for an artwork in the Works List table.
  * Standard A4 Portrait column width:
  * NO: 32px | Thumbnail: 56px | Code: 96px | Title: ~220px | Canvas: 128px | Material: 128px | Year: 48px
+ * Base row height: ~50px (thumbnail 40px + py-1.5 padding + 1px border)
  */
 export const calculateArtworkRowHeight = (art: Artwork): number => {
-  const baseHeight = 58; // 40px thumbnail + 16px py-2.5 padding + 2px border
+  const baseHeight = 50;
 
-  // Title wrapping estimate in ~220px column: approx 18 Korean / 26 English chars per line
+  // Title wrapping estimate in ~220px-240px column: approx 22 Korean / 32 English chars per line
   const title = (art.title || '').trim();
-  const titleLines = Math.max(1, Math.ceil(title.length / 18));
+  const titleLines = Math.max(1, Math.ceil(title.length / 22));
 
-  // Material wrapping estimate in ~128px column: approx 16 chars per line
+  // Material wrapping estimate in ~128px column: approx 18 chars per line
   const mat = formatMaterialOnCanvas(art.material) || '';
-  const matLines = Math.max(1, Math.ceil(mat.length / 16));
+  const matLines = Math.max(1, Math.ceil(mat.length / 18));
 
   const maxLines = Math.max(titleLines, matLines);
+  // 1-2 lines fit within the 40px thumbnail height budget
   if (maxLines > 2) {
-    return baseHeight + (maxLines - 2) * 18;
+    return baseHeight + (maxLines - 2) * 16;
   }
   return baseHeight;
 };
 
 /**
- * Dynamically packs artworks into A4 Portrait pages based on available height.
- * In A4 portrait printable area (278mm), available tbody height is approx 740px-760px.
- * Works are added to page 1 until space runs out, then moved to page 2, and so on.
+ * Dynamically packs artworks into A4 Portrait pages based on actual available content height.
+ * In A4 portrait printable area (278mm / ~1050px), available tbody height is approx 850px-860px.
+ * Works are placed continuously until available space is exhausted, then moved to the next page.
+ * No row is ever cut across pages; overflowing rows are wholly moved to the next page.
  */
-export const paginateWorksList = (artworks: Artwork[], maxTbodyHeight: number = 740): Artwork[][] => {
+export const paginateWorksList = (artworks: Artwork[], maxTbodyHeight: number = 850): Artwork[][] => {
   if (artworks.length === 0) return [[]];
 
   const pages: Artwork[][] = [];
@@ -90,18 +93,41 @@ export const SubmissionPortfolioSheet: React.FC<SubmissionPortfolioSheetProps> =
 }) => {
   const artist = getArtistProfile(settings);
 
-  // Group selected CV items by section
-  const selectedCvIdSet = new Set(selectedCvIds);
+  // Group selected CV items by section directly from latest Firestore cvSections (matching CVView)
+  const selectedCvIdSet = new Set(selectedCvIds || []);
   const cvSectionsWithSelected = CANONICAL_SECTIONS.map((sec) => {
-    const foundSec = cvSections.find((s) => s.id === sec.id || s.category === sec.category);
+    // Match canonical section against live cvSections (support id, category, or legacy activities)
+    const foundSec = cvSections.find(
+      (s) =>
+        s.id === sec.id ||
+        s.category === sec.category ||
+        (sec.id === 'otherActivities' && (s.id === 'activities' || s.category === 'activities'))
+    );
     const allItems = foundSec?.items || [];
     const filtered = allItems
-      .filter((item) => selectedCvIdSet.has(item.id))
+      .filter((item) => {
+        // Exclude only if explicitly unselected in cvSections (selected === false)
+        if (item.selected === false || item.includeInPortfolio === false) {
+          return false;
+        }
+        // If selectedCvIds has entries, include if it is in selectedCvIds
+        // OR if the item is active in the latest Firestore cvSections (handles newly added items)
+        if (selectedCvIdSet.size > 0) {
+          return selectedCvIdSet.has(item.id) || item.selected === true;
+        }
+        return true;
+      })
       .sort((a, b) => {
-        const yearA = parseInt(a.year?.match(/\d{4}/)?.[0] || '0', 10);
-        const yearB = parseInt(b.year?.match(/\d{4}/)?.[0] || '0', 10);
+        const matchA = a.year ? a.year.match(/\d{4}/) : null;
+        const matchB = b.year ? b.year.match(/\d{4}/) : null;
+        const yearA = matchA ? parseInt(matchA[0], 10) : 0;
+        const yearB = matchB ? parseInt(matchB[0], 10) : 0;
+
         if (yearB !== yearA) return yearB - yearA;
-        return (a.displayOrder || 0) - (b.displayOrder || 0);
+        const orderA = a.displayOrder ?? a.order ?? 999;
+        const orderB = b.displayOrder ?? b.order ?? 999;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.title || '').localeCompare(b.title || '');
       });
     return {
       ...sec,
@@ -535,55 +561,63 @@ export const SubmissionPortfolioSheet: React.FC<SubmissionPortfolioSheetProps> =
               </div>
 
               {/* Table of selected works (Optimized for A4 Portrait with dynamic space filling) */}
-              <div className="my-3 flex-1 flex flex-col justify-start overflow-hidden">
+              <div className="my-2.5 flex-1 flex flex-col justify-start">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-neutral-300 text-[10px] sm:text-[11px] font-mono-code text-neutral-500 uppercase tracking-wider">
-                      <th className="py-2.5 px-1 w-8 text-center">NO.</th>
-                      <th className="py-2.5 px-2 w-14 text-center">도판</th>
-                      <th className="py-2.5 px-2 w-24">작품번호</th>
-                      <th className="py-2.5 px-2">작품명 (Title)</th>
-                      <th className="py-2.5 px-2 w-32 whitespace-nowrap">Canvas Size</th>
-                      <th className="py-2.5 px-2 w-32">Material</th>
-                      <th className="py-2.5 px-1 w-12 text-center">Year</th>
+                      <th className="py-2 px-1 w-8 text-center">NO.</th>
+                      <th className="py-2 px-2 w-14 text-center">도판</th>
+                      <th className="py-2 px-2 w-24">작품번호</th>
+                      <th className="py-2 px-2">작품명 (Title)</th>
+                      <th className="py-2 px-2 w-32 whitespace-nowrap">Canvas Size</th>
+                      <th className="py-2 px-2 w-32">Material</th>
+                      <th className="py-2 px-1 w-12 text-center">Year</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {chunk.map((art, itemOffset) => {
-                      const overallIdx = (chunkStartIndices[pageIdx] ?? 0) + itemOffset;
-                      return (
-                        <tr key={art.id} className="submission-page-break-avoid hover:bg-neutral-50/50">
-                          <td className="py-2.5 px-1 text-center font-mono-code text-neutral-400 font-semibold text-[11px]">
-                            {String(overallIdx + 1).padStart(2, '0')}
-                          </td>
-                          <td className="py-2.5 px-2 text-center">
-                            <div className="w-10 h-10 mx-auto bg-neutral-100 border border-neutral-200 flex items-center justify-center overflow-hidden rounded-xs">
-                              <img
-                                src={art.imageUrl}
-                                alt={art.title}
-                                className="w-full h-full object-contain"
-                              />
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-2 font-mono-code font-semibold text-neutral-900 text-xs">
-                            {art.code}
-                          </td>
-                          <td className="py-2.5 px-2 font-serif-title font-medium text-xs sm:text-sm text-neutral-950">
-                            {art.title}
-                          </td>
-                          {/* Canvas Size: 반드시 "가로 × 세로 cm" 형식으로 한 줄 표시 (whitespace-nowrap) */}
-                          <td className="py-2.5 px-2 whitespace-nowrap font-mono-code text-[11px] text-neutral-800 font-medium">
-                            {art.widthCm} × {art.heightCm} cm
-                          </td>
-                          <td className="py-2.5 px-2 text-neutral-700 text-xs">
-                            {formatMaterialOnCanvas(art.material)}
-                          </td>
-                          <td className="py-2.5 px-1 text-center font-mono-code text-neutral-700 text-xs">
-                            {art.year}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {chunk.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-neutral-400 font-mono-code text-xs">
+                          선택된 출품 작품이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      chunk.map((art, itemOffset) => {
+                        const overallIdx = (chunkStartIndices[pageIdx] ?? 0) + itemOffset;
+                        return (
+                          <tr key={art.id} className="submission-page-break-avoid hover:bg-neutral-50/50">
+                            <td className="py-1.5 px-1 text-center font-mono-code text-neutral-400 font-semibold text-[11px]">
+                              {String(overallIdx + 1).padStart(2, '0')}
+                            </td>
+                            <td className="py-1 px-2 text-center">
+                              <div className="w-10 h-10 mx-auto bg-neutral-100 border border-neutral-200 flex items-center justify-center overflow-hidden rounded-xs">
+                                <img
+                                  src={art.imageUrl}
+                                  alt={art.title}
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                            </td>
+                            <td className="py-1.5 px-2 font-mono-code font-semibold text-neutral-900 text-xs">
+                              {art.code}
+                            </td>
+                            <td className="py-1.5 px-2 font-serif-title font-medium text-xs sm:text-sm text-neutral-950">
+                              {art.title}
+                            </td>
+                            {/* Canvas Size: 반드시 "가로 × 세로 cm" 형식으로 한 줄 표시 (whitespace-nowrap) */}
+                            <td className="py-1.5 px-2 whitespace-nowrap font-mono-code text-[11px] text-neutral-800 font-medium">
+                              {art.widthCm} × {art.heightCm} cm
+                            </td>
+                            <td className="py-1.5 px-2 text-neutral-700 text-xs">
+                              {formatMaterialOnCanvas(art.material)}
+                            </td>
+                            <td className="py-1.5 px-1 text-center font-mono-code text-neutral-700 text-xs">
+                              {art.year}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>

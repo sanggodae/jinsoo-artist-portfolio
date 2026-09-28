@@ -72,6 +72,8 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [autoPrint, setAutoPrint] = useState(false);
 
+  const initialLoadedRef = React.useRef(false);
+
   // Load Submissions on mount
   useEffect(() => {
     let isMounted = true;
@@ -81,9 +83,50 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
         const list = await fetchSubmissionsFromFirestore();
         if (!isMounted) return;
 
+        const currentArtworkIdSet = new Set(artworks.map((a) => a.id));
+        const currentCvItemIdSet = new Set(
+          cvSections.flatMap((s) => (s.items || []).map((i) => i.id))
+        );
+
         if (list && list.length > 0) {
-          setSubmissions(list);
-          setSelectedSubmissionId(list[0].id);
+          // STRICT SEPARATION: Preserve user's exact selection in sub.selectedArtworkIds
+          const syncedList = list.map((sub) => {
+            // 1. Works: Keep only IDs that exist in artworks (filters out deleted items)
+            // Strictly DO NOT force-add artworks that the user has excluded!
+            let subArtIds: string[];
+            if (Array.isArray(sub.selectedArtworkIds)) {
+              subArtIds = sub.selectedArtworkIds.filter((id) => currentArtworkIdSet.has(id));
+            } else {
+              // Only when selectedArtworkIds was never set (new default)
+              subArtIds = [...artworks]
+                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                .map((a) => a.id);
+            }
+
+            // 2. CV: Keep only valid CV IDs
+            let subCvIds: string[];
+            if (Array.isArray(sub.selectedCvIds)) {
+              subCvIds = sub.selectedCvIds.filter((id) => currentCvItemIdSet.has(id));
+            } else {
+              subCvIds = [];
+              cvSections.forEach((sec) => {
+                sec.items?.forEach((it) => {
+                  if (it.selected !== false && it.includeInPortfolio !== false) {
+                    subCvIds.push(it.id);
+                  }
+                });
+              });
+            }
+
+            return {
+              ...sub,
+              selectedArtworkIds: subArtIds,
+              selectedCvIds: subCvIds,
+            };
+          });
+
+          setSubmissions(syncedList);
+          setSelectedSubmissionId(syncedList[0].id);
         } else {
           // Initialize a clean default submission if none exists
           const defaultSub: Submission = createDefaultSubmission(artworks, cvSections, settings);
@@ -97,14 +140,58 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
         setSelectedSubmissionId(defaultSub.id);
       } finally {
         if (isMounted) setIsLoading(false);
+        initialLoadedRef.current = true;
       }
     }
 
-    loadSubmissions();
+    if (!initialLoadedRef.current) {
+      loadSubmissions();
+    }
     return () => {
       isMounted = false;
     };
-  }, [artworks, cvSections, settings]);
+  }, []);
+
+  // Synchronize submission selection when artworks or CV items are deleted from the database.
+  // NEVER force-add excluded artworks back into selectedArtworkIds.
+  useEffect(() => {
+    const currentArtworkIds = new Set(artworks.map((a) => a.id));
+    const currentCvItemIds = new Set(
+      cvSections.flatMap((s) => (s.items || []).map((i) => i.id))
+    );
+
+    setSubmissions((prevSubs) =>
+      prevSubs.map((sub) => {
+        let changed = false;
+        let nextArtIds = sub.selectedArtworkIds;
+        if (Array.isArray(nextArtIds)) {
+          const filtered = nextArtIds.filter((id) => currentArtworkIds.has(id));
+          if (filtered.length !== nextArtIds.length) {
+            nextArtIds = filtered;
+            changed = true;
+          }
+        }
+
+        let nextCvIds = sub.selectedCvIds;
+        if (Array.isArray(nextCvIds)) {
+          const filtered = nextCvIds.filter((id) => currentCvItemIds.has(id));
+          if (filtered.length !== nextCvIds.length) {
+            nextCvIds = filtered;
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          return {
+            ...sub,
+            selectedArtworkIds: nextArtIds,
+            selectedCvIds: nextCvIds,
+          };
+        }
+        return sub;
+      })
+    );
+  }, [artworks, cvSections]);
 
   // Current active submission
   const currentSubmission = useMemo(() => {
@@ -126,7 +213,7 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
     const defaultCvIds: string[] = [];
     cvs.forEach((sec) => {
       sec.items?.forEach((it) => {
-        if (it.selected) {
+        if (it.selected !== false && it.includeInPortfolio !== false) {
           defaultCvIds.push(it.id);
         }
       });
@@ -148,7 +235,7 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
     };
   }
 
-  // Update current submission state
+  // Update current submission state and persist to Firestore
   const updateCurrentSubmission = (updater: (prev: Submission) => Submission) => {
     if (!currentSubmission) return;
     const updated = updater(currentSubmission);
@@ -157,6 +244,13 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
     setSubmissions((prev) =>
       prev.map((s) => (s.id === updated.id ? updated : s))
     );
+
+    // Auto-save submission selection to Firestore so preview/print is immediately synchronized
+    if (isAdmin) {
+      saveSubmissionToFirestore(updated).catch((err) =>
+        console.warn('[SubmissionView] Auto-save notice:', err)
+      );
+    }
   };
 
   // Create new submission package
@@ -301,7 +395,7 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
     const defaultIds: string[] = [];
     cvSections.forEach((sec) => {
       sec.items?.forEach((it) => {
-        if (it.selected) defaultIds.push(it.id);
+        if (it.selected !== false && it.includeInPortfolio !== false) defaultIds.push(it.id);
       });
     });
     updateCurrentSubmission((prev) => ({
@@ -330,16 +424,26 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
     }));
   };
 
-  // Resolved entities for preview / render
+  // Resolved entities for preview / render directly from live artworks and current submission selection
   const resolvedSelectedArtworks = useMemo(() => {
+    if (!artworks || artworks.length === 0) return [];
     if (!currentSubmission) return [];
     const idMap = new Map<string, Artwork>(artworks.map((a) => [a.id, a]));
-    const result: Artwork[] = [];
-    currentSubmission.selectedArtworkIds.forEach((id) => {
-      const art = idMap.get(id);
-      if (art) result.push(art);
-    });
-    return result;
+
+    const selectedIds = currentSubmission.selectedArtworkIds;
+    // Strictly respect SUBMISSION_SELECTED_WORKS:
+    // If selectedArtworkIds is an array (even if empty or filtered), return ONLY the matching artworks!
+    if (Array.isArray(selectedIds)) {
+      const result: Artwork[] = [];
+      selectedIds.forEach((id) => {
+        const art = idMap.get(id);
+        if (art) result.push(art);
+      });
+      return result;
+    }
+
+    // Default to all current artworks sorted by displayOrder ONLY if selectedArtworkIds was never initialized
+    return [...artworks].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   }, [artworks, currentSubmission]);
 
   const resolvedArtistNote = useMemo(() => {
@@ -359,10 +463,13 @@ export const SubmissionView: React.FC<SubmissionViewProps> = ({
   const resolvedCoverArtwork = useMemo(() => {
     if (!currentSubmission) return artworks[0];
     if (currentSubmission.coverArtworkId) {
-      const found = artworks.find((a) => a.id === currentSubmission.coverArtworkId);
-      if (found) return found;
+      const isSelected = (currentSubmission.selectedArtworkIds || []).includes(currentSubmission.coverArtworkId);
+      if (isSelected) {
+        const found = artworks.find((a) => a.id === currentSubmission.coverArtworkId);
+        if (found) return found;
+      }
     }
-    return resolvedSelectedArtworks[0] || artworks[0];
+    return resolvedSelectedArtworks.find((a) => a.isFeatured) || resolvedSelectedArtworks[0] || artworks[0];
   }, [artworks, currentSubmission, resolvedSelectedArtworks]);
 
   // Access check: only admin can view Submission Studio
