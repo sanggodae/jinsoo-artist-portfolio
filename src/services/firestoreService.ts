@@ -502,10 +502,42 @@ export async function setAwardInFirestore(award: Award): Promise<void> {
 export async function fetchCVFromFirestore(): Promise<CVSection[]> {
   const db = getFirebaseFirestore();
   const snap = await getDocs(collection(db, COLLECTIONS.CV));
-  return snap.docs.map((d) => d.data() as CVSection);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: data.id || d.id,
+      category: data.category || d.id,
+      ...data,
+    } as CVSection;
+  });
 }
 
 export const getCVSectionsFromFirestore = fetchCVFromFirestore;
+
+export function subscribeFirestoreCV(
+  callback: (sections: CVSection[]) => void
+): () => void {
+  const db = getFirebaseFirestore();
+  return onSnapshot(
+    collection(db, COLLECTIONS.CV),
+    (snap) => {
+      const list = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: data.id || d.id,
+          category: data.category || d.id,
+          ...data,
+        } as CVSection;
+      });
+      if (list.length > 0) {
+        callback(list);
+      }
+    },
+    (err) => {
+      console.warn('[Firestore] CV real-time subscription error:', err);
+    }
+  );
+}
 
 export async function setCVSectionInFirestore(section: CVSection): Promise<void> {
   const db = getFirebaseFirestore();

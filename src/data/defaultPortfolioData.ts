@@ -86,7 +86,7 @@ export const DEFAULT_CV_SECTIONS: CVSection[] = [
     id: 'groupExhibitions',
     category: 'groupExhibitions',
     titleKo: '단체전',
-    titleEn: 'Group Exhibitions',
+    titleEn: 'GROUP EXHIBITIONS',
     items: [
       {
         id: 'group-1',
@@ -137,8 +137,8 @@ export const DEFAULT_CV_SECTIONS: CVSection[] = [
         location: '도쿄, 일본',
         displayOrder: 4,
         order: 4,
-        selected: false,
-        includeInPortfolio: false,
+        selected: true,
+        includeInPortfolio: true,
       },
     ],
   },

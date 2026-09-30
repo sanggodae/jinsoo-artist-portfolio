@@ -21,6 +21,7 @@ import {
 import {
   saveCVSectionToFirestore,
   saveSiteSettingsToFirestore,
+  getCVSectionsFromFirestore,
 } from '../../services/firestoreService';
 import { uploadArtistProfilePhoto } from '../../services/storageService';
 import { getArtistProfile } from '../../utils/artistProfile';
@@ -116,15 +117,35 @@ export const CVView: React.FC<CVViewProps> = ({
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Proactively verify and hydrate latest Firestore CV data when CVView mounts
+  React.useEffect(() => {
+    let isMounted = true;
+    getCVSectionsFromFirestore()
+      .then((liveSections) => {
+        if (!isMounted) return;
+        if (liveSections && liveSections.length > 0) {
+          onUpdateSections(liveSections);
+        }
+      })
+      .catch((err) => {
+        console.warn('[CVView] Direct Firestore read notice:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Merge canonical 6 sections with current sections data
   const normalizedSections = useMemo(() => {
     return CANONICAL_CV_SECTIONS.map((canonical) => {
-      // Find matching section in current state (support both 'otherActivities' and legacy 'activities')
+      // Find matching section in current state (support canonical id, category, legacy activities, and group variations)
       const matched = sections.find(
         (s) =>
           s.id === canonical.id ||
           s.category === canonical.category ||
-          (canonical.id === 'otherActivities' && (s.id === 'activities' || s.category === 'activities'))
+          (canonical.id === 'otherActivities' && (s.id === 'activities' || s.category === 'activities')) ||
+          (canonical.id === 'groupExhibitions' &&
+            (s.id?.toLowerCase().includes('group') || s.category?.toLowerCase().includes('group')))
       );
 
       const items: CVItem[] = (matched?.items || []).map((it, idx) => ({

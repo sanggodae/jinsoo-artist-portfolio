@@ -38,6 +38,7 @@ import {
   saveArtworkToFirestore,
   deleteArtworkFromFirestore,
   getCVSectionsFromFirestore,
+  subscribeFirestoreCV,
   getArtistNotesFromFirestore,
   getSiteSettingsFromFirestore,
 } from './services/firestoreService';
@@ -70,7 +71,20 @@ export default function App() {
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Portfolio Content States (CV, Artist Notes, Contact & Site Settings)
-  const [cvSections, setCvSections] = useState<CVSection[]>(DEFAULT_CV_SECTIONS);
+  const [cvSections, setCvSections] = useState<CVSection[]>(() => {
+    try {
+      const cached = localStorage.getItem('PARK_JINSOO_CV_SECTIONS_V1');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_CV_SECTIONS;
+  });
   const [artistNotes, setArtistNotes] = useState<ArtistNoteItem[]>(() => {
     try {
       const cached = localStorage.getItem('PARK_JINSOO_ARTIST_NOTES_V2');
@@ -156,6 +170,11 @@ export default function App() {
 
         if (cvList && cvList.length > 0) {
           setCvSections(cvList);
+          try {
+            localStorage.setItem('PARK_JINSOO_CV_SECTIONS_V1', JSON.stringify(cvList));
+          } catch {
+            // ignore
+          }
         }
         if (notesList && notesList.length > 0) {
           const finalNotes = (['A', 'B'] as const).map((key) => {
@@ -277,10 +296,44 @@ export default function App() {
 
     loadInitialData();
 
+    // Real-time synchronization for CV sections from Firestore
+    const unsubscribeCV = subscribeFirestoreCV((liveCvList) => {
+      if (!isMounted) return;
+      if (liveCvList && liveCvList.length > 0) {
+        setCvSections(liveCvList);
+        try {
+          localStorage.setItem('PARK_JINSOO_CV_SECTIONS_V1', JSON.stringify(liveCvList));
+        } catch {
+          // ignore
+        }
+      }
+    });
+
     return () => {
       isMounted = false;
+      unsubscribeCV();
     };
   }, []);
+
+  // Whenever user navigates to CV tab, proactively re-fetch latest CV from Firestore
+  useEffect(() => {
+    if (portfolioTab === 'CV') {
+      getCVSectionsFromFirestore()
+        .then((liveCv) => {
+          if (liveCv && liveCv.length > 0) {
+            setCvSections(liveCv);
+            try {
+              localStorage.setItem('PARK_JINSOO_CV_SECTIONS_V1', JSON.stringify(liveCv));
+            } catch {
+              // ignore
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('[App] CV tab active refresh notice:', err);
+        });
+    }
+  }, [portfolioTab]);
 
   // Sync to local persistent cache for offline resilience (after initial hydration)
   useEffect(() => {
