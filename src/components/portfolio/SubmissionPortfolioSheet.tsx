@@ -3,6 +3,7 @@ import { Artwork, CVSection, CVItem, ArtistNoteItem, SiteSettings, Submission } 
 import { formatMaterialOnCanvas, formatCanvasDimensions } from '../../utils/formatters';
 import { getArtistProfile } from '../../utils/artistProfile';
 import { DEFAULT_ARTIST_NOTES } from '../../data/defaultPortfolioData';
+import { sortCVItems } from './CVView';
 
 interface SubmissionPortfolioSheetProps {
   submission: Submission;
@@ -117,21 +118,10 @@ export const SubmissionPortfolioSheet: React.FC<SubmissionPortfolioSheetProps> =
         }
         return true;
       })
-      .sort((a, b) => {
-        const matchA = a.year ? a.year.match(/\d{4}/) : null;
-        const matchB = b.year ? b.year.match(/\d{4}/) : null;
-        const yearA = matchA ? parseInt(matchA[0], 10) : 0;
-        const yearB = matchB ? parseInt(matchB[0], 10) : 0;
-
-        if (yearB !== yearA) return yearB - yearA;
-        const orderA = a.displayOrder ?? a.order ?? 999;
-        const orderB = b.displayOrder ?? b.order ?? 999;
-        if (orderA !== orderB) return orderA - orderB;
-        return (a.title || '').localeCompare(b.title || '');
-      });
+    const sortedItems = sortCVItems(filtered);
     return {
       ...sec,
-      items: filtered,
+      items: sortedItems,
     };
   }).filter((sec) => sec.items.length > 0);
 

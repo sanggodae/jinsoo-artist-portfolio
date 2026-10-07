@@ -70,6 +70,7 @@ export interface CVItem {
   id: string;
   category: CVCategory;
   year: string;
+  period?: string;              // 전시 및 활동 기간 (예: 08.26~08.29)
   title: string;
   institution?: string;         // 기관명, 학교명, 갤러리명, 소장처
   subtitle?: string;            // 기존 subtitle 호환

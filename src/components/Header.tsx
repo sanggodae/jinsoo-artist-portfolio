@@ -44,19 +44,26 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { user, isAdmin } = useAuth();
   const artist = getArtistProfile(settings);
+  const englishNameWithSlash =
+    artist.englishName === 'PARK JIN SOO'
+      ? 'PARK / JIN SOO'
+      : artist.englishName.includes(' ')
+      ? `${artist.englishName.split(' ')[0]} / ${artist.englishName.split(' ').slice(1).join(' ')}`
+      : 'PARK / JIN SOO';
 
   return (
     <header className="border-b border-neutral-200/90 bg-[#FFFFFF]/98 backdrop-blur-xs sticky top-0 z-30 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
       {/* Top Utility & Branding Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-18">
+        <div className="flex items-center justify-between min-h-[64px] py-1.5 sm:py-0 sm:h-18">
           {/* Logo & Artist Title */}
           <div
-            className="flex items-baseline gap-3 cursor-pointer group"
+            className="flex items-center gap-3 cursor-pointer group"
             onClick={() => onSelectPortfolioTab('COVER')}
             title="포트폴리오 표지로 이동"
           >
-            <div>
+            {/* PC Display (sm and up): Existing original design preserved strictly */}
+            <div className="hidden sm:block">
               <span className="text-[10px] tracking-[0.28em] uppercase font-semibold text-neutral-400 block mb-0.5">
                 FINE ART PORTFOLIO & ARCHIVE
               </span>
@@ -66,6 +73,24 @@ export const Header: React.FC<HeaderProps> = ({
                   {artist.formattedKoHanja}
                 </span>
               </h1>
+            </div>
+
+            {/* Mobile Header Display (below sm): Exact 3-line format requested */}
+            <div className="sm:hidden flex flex-col justify-center select-none py-0.5 text-left">
+              {/* 첫째 줄: PARK / JIN SOO */}
+              <div className="font-serif-title font-semibold text-xs tracking-wider text-neutral-900 whitespace-nowrap leading-tight">
+                {englishNameWithSlash}
+              </div>
+
+              {/* 둘째 줄: 박진수 */}
+              <div className="text-[11px] font-sans font-medium text-neutral-900 whitespace-nowrap leading-tight mt-0.5">
+                {artist.koreanName || '박진수'}
+              </div>
+
+              {/* 셋째 줄: 朴鎭洙 */}
+              <div className="text-[10.5px] font-serif-title text-neutral-500 whitespace-nowrap leading-tight mt-0.5">
+                {artist.hanjaName || '朴鎭洙'}
+              </div>
             </div>
             <div className="hidden lg:flex items-center gap-2 text-xs text-neutral-400 pl-4 border-l border-neutral-200 font-mono-code">
               <span>{totalCount} WORKS</span>

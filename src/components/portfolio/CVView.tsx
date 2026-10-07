@@ -60,29 +60,124 @@ const CANONICAL_CV_SECTIONS: CanonicalSectionMeta[] = [
 ];
 
 /**
- * Sorts CV items by:
- * 1) Year descending (newest first, e.g. 2026 before 2025)
- * 2) displayOrder ascending (1, 2, 3...)
+ * Extract period string from item (from direct item.period or parsed from institution/subtitle).
  */
-function sortCVItems(items: CVItem[]): CVItem[] {
-  return [...items].sort((a, b) => {
-    const matchA = a.year ? a.year.match(/\d{4}/) : null;
-    const matchB = b.year ? b.year.match(/\d{4}/) : null;
-    const yearA = matchA ? parseInt(matchA[0], 10) : 0;
-    const yearB = matchB ? parseInt(matchB[0], 10) : 0;
+export function getItemPeriod(item: CVItem): string | null {
+  if (item.period && typeof item.period === 'string' && item.period.trim()) {
+    return item.period.trim();
+  }
+  const text = `${item.institution || ''} ${item.subtitle || ''}`;
+  const match = text.match(/\(?(\d{1,2}\.\d{1,2}\s*~\s*\d{1,2}\.\d{1,2})\)?/)
+             || text.match(/\(?(\d{4}\.\d{1,2}\.\d{1,2}\s*~\s*\d{1,2}\.\d{1,2})\)?/)
+             || text.match(/\(?(\d{4}\.\d{1,2}\.\d{1,2}\s*~\s*\d{4}\.\d{1,2}\.\d{1,2})\)?/);
+  if (match) {
+    return match[1].trim();
+  }
+  return null;
+}
 
-    if (yearB !== yearA) {
-      return yearB - yearA;
-    }
+/**
+ * Formats period with parentheses (e.g. "(08.26~08.29)").
+ */
+export function formatPeriodDisplay(rawPeriod: string | null): string {
+  if (!rawPeriod) return '';
+  const trimmed = rawPeriod.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+    return trimmed;
+  }
+  return `(${trimmed})`;
+}
 
-    const orderA = a.displayOrder ?? a.order ?? 999;
-    const orderB = b.displayOrder ?? b.order ?? 999;
-    if (orderA !== orderB) {
-      return orderA - orderB;
-    }
+/**
+ * Strips date in parentheses from institution to prevent redundant display under title.
+ */
+export function cleanInstitution(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\s*\(\d{1,2}\.\d{1,2}\s*~\s*\d{1,2}\.\d{1,2}\)/g, '')
+    .replace(/\s*\(\d{4}\.\d{1,2}\.\d{1,2}\s*~\s*\d{1,2}\.\d{1,2}\)/g, '')
+    .replace(/\s*\(\d{4}\.\d{1,2}\.\d{1,2}\s*~\s*\d{4}\.\d{1,2}\.\d{1,2}\)/g, '')
+    .replace(/\s*\d{1,2}\.\d{1,2}\s*~\s*\d{1,2}\.\d{1,2}/g, '')
+    .trim();
+}
 
-    return (a.title || '').localeCompare(b.title || '');
-  });
+/**
+ * Parses start date from item's period into a numerical score (MM*100 + DD).
+ */
+export function getStartDateScore(item: CVItem): number | null {
+  const period = getItemPeriod(item);
+  if (!period) return null;
+  const clean = period.replace(/^[^\d]*/, '');
+  
+  // YYYY.MM.DD
+  const ymdMatch = clean.match(/^\d{4}[./-](\d{1,2})[./-](\d{1,2})/);
+  if (ymdMatch) {
+    return parseInt(ymdMatch[1], 10) * 100 + parseInt(ymdMatch[2], 10);
+  }
+
+  // MM.DD
+  const mdMatch = clean.match(/^(\d{1,2})[./-](\d{1,2})/);
+  if (mdMatch) {
+    return parseInt(mdMatch[1], 10) * 100 + parseInt(mdMatch[2], 10);
+  }
+
+  // MM only
+  const mMatch = clean.match(/^(\d{1,2})/);
+  if (mMatch) {
+    return parseInt(mMatch[1], 10) * 100;
+  }
+
+  return null;
+}
+
+/**
+ * Sorts CV items for display:
+ * 1) Year descending (newest year first, e.g. 2026 before 2025)
+ * 2) Within same year: items with date sorted by start date descending (latest first)
+ * 3) If no date: preserves original order
+ */
+export function sortCVItems(items: CVItem[]): CVItem[] {
+  return [...items]
+    .map((item, originalIndex) => ({ item, originalIndex }))
+    .sort((aObj, bObj) => {
+      const a = aObj.item;
+      const b = bObj.item;
+
+      const matchA = a.year ? a.year.match(/\d{4}/) : null;
+      const matchB = b.year ? b.year.match(/\d{4}/) : null;
+      const yearA = matchA ? parseInt(matchA[0], 10) : 0;
+      const yearB = matchB ? parseInt(matchB[0], 10) : 0;
+
+      // 1. Year descending
+      if (yearB !== yearA) {
+        return yearB - yearA;
+      }
+
+      // 2. Start date descending if both have dates
+      const scoreA = getStartDateScore(a);
+      const scoreB = getStartDateScore(b);
+
+      if (scoreA !== null && scoreB !== null) {
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA;
+        }
+      } else if (scoreA !== null && scoreB === null) {
+        return -1; // Item with date is placed above
+      } else if (scoreA === null && scoreB !== null) {
+        return 1;  // Item with date is placed above
+      }
+
+      // 3. Fallback to displayOrder or originalIndex to maintain order
+      const orderA = a.displayOrder ?? a.order ?? aObj.originalIndex;
+      const orderB = b.displayOrder ?? b.order ?? bObj.originalIndex;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      return aObj.originalIndex - bObj.originalIndex;
+    })
+    .map((obj) => obj.item);
 }
 
 export const CVView: React.FC<CVViewProps> = ({
@@ -334,6 +429,7 @@ export const CVView: React.FC<CVViewProps> = ({
 
     const normalizedItem: CVItem = {
       ...item,
+      period: item.period?.trim() || '',
       institution: item.institution || item.subtitle || '',
       subtitle: item.institution || item.subtitle || '',
       location: item.location || '',
@@ -748,46 +844,63 @@ export const CVView: React.FC<CVViewProps> = ({
                 ) : (
                   // Editorial Typographical List
                   <div className="divide-y divide-neutral-100">
-                    {displayItems.map((item) => (
-                      <div
-                        key={item.id}
-                        id={`cv-item-${item.id}`}
-                        className={`group py-3.5 transition-colors ${
-                          isAdmin ? 'hover:bg-neutral-50/70 px-2 -mx-2 rounded-xs' : ''
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-6">
-                          {/* Column 1: Year (fixed width, monospace, muted neutral) */}
-                          <div className="w-20 sm:w-24 shrink-0 font-mono-code text-xs text-neutral-400 sm:pt-0.5 tracking-wider">
-                            {item.year}
-                          </div>
+                    {displayItems.map((item) => {
+                      const itemPeriod = getItemPeriod(item);
+                      const formattedPeriod = formatPeriodDisplay(itemPeriod);
+                      const cleanedInstitution = cleanInstitution(item.institution || item.subtitle || '');
 
-                          {/* Column 2: Title, Institution, Description */}
-                          <div className="flex-1 min-w-0 space-y-0.5">
-                            <div className="text-sm sm:text-[14.5px] font-medium text-neutral-900 leading-snug">
-                              {item.title}
+                      return (
+                        <div
+                          key={item.id}
+                          id={`cv-item-${item.id}`}
+                          className={`group py-3.5 transition-colors ${
+                            isAdmin ? 'hover:bg-neutral-50/70 px-2 -mx-2 rounded-xs' : ''
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-6">
+                            {/* Left Group: [연도] [고정 폭 기간 영역] [전시/활동 제목] */}
+                            <div className="flex-1 min-w-0 flex items-start gap-2 sm:gap-3">
+                              {/* 1. Year: fixed width (e.g. w-12 sm:w-14) */}
+                              <div className="w-12 sm:w-14 shrink-0 font-mono-code text-xs text-neutral-400 pt-0.5 tracking-wider">
+                                {item.year?.trim() || ''}
+                              </div>
+
+                              {/* 2. Fixed Width Period Area: always constant width across ALL items */}
+                              <div className="w-[105px] sm:w-[122px] shrink-0 font-mono-code text-xs text-neutral-500 pt-0.5 whitespace-nowrap">
+                                {formattedPeriod ? (
+                                  <span>{formattedPeriod}</span>
+                                ) : (
+                                  <span className="invisible select-none" aria-hidden="true">(00.00~00.00)</span>
+                                )}
+                              </div>
+
+                              {/* 3. Title, Institution, Description */}
+                              <div className="flex-1 min-w-0 space-y-0.5">
+                                <div className="text-sm sm:text-[14.5px] font-medium text-neutral-900 leading-snug">
+                                  {item.title}
+                                </div>
+
+                                {cleanedInstitution && (
+                                  <div className="text-xs sm:text-[13px] text-neutral-600 font-light leading-relaxed">
+                                    {cleanedInstitution}
+                                  </div>
+                                )}
+
+                                {item.description && (
+                                  <div className="text-xs text-neutral-500 font-light mt-1 leading-relaxed">
+                                    {item.description}
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
-                            {(item.institution || item.subtitle) && (
-                              <div className="text-xs sm:text-[13px] text-neutral-600 font-light leading-relaxed">
-                                {item.institution || item.subtitle}
-                              </div>
-                            )}
-
-                            {item.description && (
-                              <div className="text-xs text-neutral-500 font-light mt-1 leading-relaxed">
-                                {item.description}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Column 3: Location & Admin-only Controls */}
-                          <div className="shrink-0 flex items-center justify-between sm:justify-end gap-3 sm:pt-0.5">
-                            {item.location && (
-                              <span className="text-xs font-mono-code text-neutral-400 whitespace-nowrap">
-                                {item.location}
-                              </span>
-                            )}
+                            {/* Right Group: Location & Admin-only Controls */}
+                            <div className="shrink-0 flex items-center justify-between sm:justify-end gap-3 sm:pt-0.5">
+                              {item.location && (
+                                <span className="text-xs font-mono-code text-neutral-400 whitespace-nowrap">
+                                  {item.location}
+                                </span>
+                              )}
 
                             {/* Admin Controls: Checkbox, Edit, Delete (Visitors NEVER see this) */}
                             {isAdmin && (
@@ -844,7 +957,8 @@ export const CVView: React.FC<CVViewProps> = ({
                           </div>
                         </div>
                       </div>
-                    ))}
+                    );
+                  })}
                   </div>
                 )}
               </section>
@@ -909,7 +1023,7 @@ export const CVView: React.FC<CVViewProps> = ({
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* 2. Year */}
                   <div>
                     <label className="block text-neutral-700 font-medium mb-1">
@@ -925,7 +1039,26 @@ export const CVView: React.FC<CVViewProps> = ({
                           item: { ...editingItem.item, year: e.target.value },
                         })
                       }
-                      placeholder="예: 2026 또는 2024–2026"
+                      placeholder="예: 2026"
+                      className="w-full px-3 py-2 border border-neutral-300 rounded font-mono-code focus:outline-none focus:border-neutral-900"
+                    />
+                  </div>
+
+                  {/* 2-1. Period */}
+                  <div>
+                    <label className="block text-neutral-700 font-medium mb-1">
+                      기간 (Period, 선택 사항)
+                    </label>
+                    <input
+                      type="text"
+                      value={editingItem.item.period || ''}
+                      onChange={(e) =>
+                        setEditingItem({
+                          ...editingItem,
+                          item: { ...editingItem.item, period: e.target.value },
+                        })
+                      }
+                      placeholder="예: 08.26~08.29"
                       className="w-full px-3 py-2 border border-neutral-300 rounded font-mono-code focus:outline-none focus:border-neutral-900"
                     />
                   </div>
